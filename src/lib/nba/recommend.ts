@@ -1,6 +1,6 @@
 import { getPlayers, getSeasonStats, getTrendingAdds } from "@/lib/sleeper/client";
 import type { SleeperPlayer } from "@/lib/sleeper/types";
-import { formDelta, getRecentForm, type FormDelta, type RecentForm } from "./form";
+import { describeForm, getRecentForm, type FormDelta } from "./form";
 import { fantasyRelevant, ratesFromStats, type PlayerRates } from "./rates";
 import {
   CATEGORY_KEYS,
@@ -50,7 +50,7 @@ export type AnalysisContext = {
   players: Record<string, SleeperPlayer>;
   rates: Map<string, PlayerRates>;
   norms: CategoryNorms;
-  form: Map<string, RecentForm>;
+  form: Map<string, FormDelta>;
   buzz: Record<string, number>;
   rosteredIds: Set<string>;
   pointsSettings: Record<string, number>;
@@ -113,8 +113,8 @@ function buildTags(
 ): ReasonTag[] {
   const tags: ReasonTag[] = [];
 
-  if (form && form.minutes >= 3) tags.push({ label: "Minutes Up", tone: "hot" });
-  if (form && form.points >= 4) tags.push({ label: "Scoring Surge", tone: "hot" });
+  if (form && form.minutesPct >= 0.15) tags.push({ label: "Minutes Up", tone: "hot" });
+  if (form && form.pointsPct >= 0.25) tags.push({ label: "Scoring Surge", tone: "hot" });
   if (buzz >= 200) tags.push({ label: "League-Wide Buzz", tone: "hot" });
 
   if (z) {
@@ -182,11 +182,11 @@ function toRecommendation(
     bestCategories: ordered.slice(0, 3),
     worstCategory: ordered[ordered.length - 1] ?? null,
     buzz: ctx.buzz[rates.playerId] ?? 0,
-    form: formDelta(rates, ctx.form.get(rates.playerId)),
+    form: ctx.form.get(rates.playerId) ?? null,
     tags: buildTags(
       rates,
       z,
-      formDelta(rates, ctx.form.get(rates.playerId)),
+      ctx.form.get(rates.playerId) ?? null,
       ctx.buzz[rates.playerId] ?? 0,
       player,
       format,
@@ -231,36 +231,39 @@ export function getSleepers(
   const rankOf = new Map(ranked.map((p, i) => [p.playerId, i + 1]));
 
   const scored = pool.map((rates) => {
-    const form = formDelta(rates, ctx.form.get(rates.playerId));
+    const form = ctx.form.get(rates.playerId) ?? null;
     const buzz = ctx.buzz[rates.playerId] ?? 0;
     const player = ctx.players[rates.playerId];
 
-    // Per-36 production relative to the minutes they actually play: a young
-    // player producing at a high per-36 rate in a small role is the classic
-    // breakout shape.
+    // Per-36 production relative to the minutes they actually play: a player
+    // producing at a high per-36 rate in a small role is the classic breakout
+    // shape, and unlike the weekly splits this is computed from full-season
+    // totals, so it is stable rather than sample noise.
     const per36 = rates.mpg > 0 ? ((rates.pts + rates.reb + rates.ast) / rates.mpg) * 36 : 0;
-    const roleUpside = rates.mpg < 28 ? per36 / 10 : 0;
-    const youth = player?.age && player.age <= 24 ? 1.2 : 0;
+    const roleUpside = rates.mpg < 28 ? per36 / 12 : 0;
+    const youth = player?.age && player.age <= 24 ? 1 : 0;
 
-    const rise =
-      (form ? Math.max(0, form.minutes) * 0.8 + Math.max(0, form.points) * 0.5 : 0) +
-      Math.min(buzz / 150, 3) +
-      roleUpside +
-      youth;
+    // Form is a relative change against the player's own season rate, capped
+    // so one hot stretch cannot outweigh everything else on the list.
+    const trend = form
+      ? Math.min(Math.max(0, form.minutesPct), 0.6) * 3 +
+        Math.min(Math.max(0, form.pointsPct), 0.8) * 1.5
+      : 0;
 
+    const rise = trend + Math.min(buzz / 200, 2.5) + roleUpside + youth;
+
+    const formPhrase = form ? describeForm(form) : null;
     let reason: string;
-    if (form && form.minutes >= 3) {
-      reason = `Minutes up ${form.minutes.toFixed(1)}/g in late-season action`;
-    } else if (form && form.points >= 3) {
-      reason = `Scoring up ${form.points.toFixed(1)}/g down the stretch`;
+    if (formPhrase) {
+      reason = formPhrase;
     } else if (buzz >= 100) {
       reason = `Added in ${buzz.toLocaleString()} Sleeper leagues this week`;
     } else if (roleUpside > 0 && per36 >= 28) {
-      reason = `${per36.toFixed(0)} PRA per 36 in only ${rates.mpg.toFixed(0)} minutes`;
+      reason = `${per36.toFixed(0)} PTS+REB+AST per 36 in only ${rates.mpg.toFixed(0)} minutes a night`;
     } else if (youth) {
-      reason = `Age ${player?.age} with a growing role`;
+      reason = `Age ${player?.age} and already producing in a rotation role`;
     } else {
-      reason = `Producing above his roster share`;
+      reason = `Producing more than his ownership suggests`;
     }
 
     return { rates, rise, reason };

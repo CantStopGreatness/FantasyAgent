@@ -1,94 +1,99 @@
 import { getWeekStats } from "@/lib/sleeper/client";
 import type { StatsBySeason } from "@/lib/sleeper/types";
-import type { PlayerRates } from "./rates";
 
 /**
- * Late-season form, sampled from Sleeper's per-week NBA stat files.
+ * Late-season form, derived from Sleeper's per-week NBA stat files.
  *
- * A caveat worth stating plainly: each weekly file holds roughly a *single*
- * game per player, not a full week's aggregate — summing all 25 weeks recovers
- * only ~30% of a player's season totals. So this is a sample of recent games,
- * not a true "last N games" split, and the UI labels it as late-season form
- * rather than claiming precision the data does not support.
+ * An important caveat drives this whole module's design: a weekly file is a
+ * *partial-week aggregate* covering an unknown number of games, and it carries
+ * no `gp` field. Summing all 25 weeks recovers only ~30% of a player's season
+ * totals, and treating one file as one game inflates every rate — a 16.8 MPG
+ * bench player reads as 37 MPG.
+ *
+ * So we never claim a per-game number from this data. Instead we compare a
+ * player's output *per file* late in the season against their own output *per
+ * file* across the whole season. Both sides share the same unknown unit, so
+ * the ratio is meaningful even though neither absolute figure is.
  */
-export type RecentForm = {
-  games: number;
-  mpg: number;
-  pts: number;
-  reb: number;
-  ast: number;
-  stl: number;
-  blk: number;
-  tpm: number;
-};
-
 export type FormDelta = {
-  /** Late-season minutes per game minus season-long minutes per game. */
-  minutes: number;
-  points: number;
-  games: number;
+  /** Change in playing time vs the player's own season rate, as a fraction. */
+  minutesPct: number;
+  /** Change in scoring vs the player's own season rate, as a fraction. */
+  pointsPct: number;
+  /** How many late-season files the player appears in (max 3). */
+  appearances: number;
 };
 
-const LAST_POPULATED_WEEK = 25;
-const SAMPLE_WEEKS = 3;
+/** Weeks 1-25 carry data for the 2025 season; later weeks are empty. */
+const LAST_WEEK = 25;
+const RECENT_WEEKS = 3;
 
-export async function getRecentForm(season: string): Promise<Map<string, RecentForm>> {
-  const weeks = Array.from(
-    { length: SAMPLE_WEEKS },
-    (_, i) => LAST_POPULATED_WEEK - i,
-  ).filter((w) => w > 0);
+/** Below this we do not trust the split enough to say anything about it. */
+const MIN_RECENT_APPEARANCES = 2;
+const MIN_SEASON_APPEARANCES = 6;
+
+type Tally = { files: number; seconds: number; pts: number };
+
+function tally(files: StatsBySeason[]): Map<string, Tally> {
+  const acc = new Map<string, Tally>();
+  for (const file of files) {
+    for (const [playerId, line] of Object.entries(file)) {
+      if (playerId.startsWith("TEAM_")) continue;
+      if (!line || Object.keys(line).length === 0) continue;
+      const cur = acc.get(playerId) ?? { files: 0, seconds: 0, pts: 0 };
+      cur.files += 1;
+      cur.seconds += line.sp ?? 0;
+      cur.pts += line.pts ?? 0;
+      acc.set(playerId, cur);
+    }
+  }
+  return acc;
+}
+
+/**
+ * Compare each player's last three weekly files against their season-long
+ * per-file average. Returns an empty map if the weekly endpoint is unavailable
+ * — form is an enhancement and must never take down a recommendation request.
+ */
+export async function getRecentForm(season: string): Promise<Map<string, FormDelta>> {
+  const weeks = Array.from({ length: LAST_WEEK }, (_, i) => i + 1);
 
   let files: StatsBySeason[];
   try {
     files = await Promise.all(weeks.map((w) => getWeekStats(season, w)));
   } catch {
-    // Form is an enhancement; never let it take down a recommendation request.
     return new Map();
   }
 
-  const acc = new Map<string, RecentForm & { seconds: number }>();
-  for (const file of files) {
-    for (const [playerId, line] of Object.entries(file)) {
-      if (playerId.startsWith("TEAM_")) continue;
-      if (!line || Object.keys(line).length === 0) continue;
+  const seasonTally = tally(files);
+  const recentTally = tally(files.slice(-RECENT_WEEKS));
 
-      const cur =
-        acc.get(playerId) ??
-        { games: 0, seconds: 0, mpg: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, tpm: 0 };
-      cur.games += 1;
-      cur.seconds += line.sp ?? 0;
-      cur.pts += line.pts ?? 0;
-      cur.reb += line.reb ?? 0;
-      cur.ast += line.ast ?? 0;
-      cur.stl += line.stl ?? 0;
-      cur.blk += line.blk ?? 0;
-      cur.tpm += line.tpm ?? 0;
-      acc.set(playerId, cur);
-    }
-  }
+  const out = new Map<string, FormDelta>();
+  for (const [playerId, recent] of recentTally) {
+    const all = seasonTally.get(playerId);
+    if (!all) continue;
+    if (recent.files < MIN_RECENT_APPEARANCES) continue;
+    if (all.files < MIN_SEASON_APPEARANCES) continue;
 
-  const out = new Map<string, RecentForm>();
-  for (const [playerId, v] of acc) {
-    if (v.games === 0) continue;
+    const seasonSecondsPerFile = all.seconds / all.files;
+    const seasonPtsPerFile = all.pts / all.files;
+    if (seasonSecondsPerFile <= 0) continue;
+
     out.set(playerId, {
-      games: v.games,
-      mpg: v.seconds / 60 / v.games,
-      pts: v.pts / v.games,
-      reb: v.reb / v.games,
-      ast: v.ast / v.games,
-      stl: v.stl / v.games,
-      blk: v.blk / v.games,
-      tpm: v.tpm / v.games,
+      minutesPct: recent.seconds / recent.files / seasonSecondsPerFile - 1,
+      pointsPct:
+        seasonPtsPerFile > 0 ? recent.pts / recent.files / seasonPtsPerFile - 1 : 0,
+      appearances: recent.files,
     });
   }
   return out;
 }
 
-export function formDelta(rates: PlayerRates, form: RecentForm | undefined): FormDelta | null {
-  if (!form || form.games === 0) return null;
-  return {
-    minutes: form.mpg - rates.mpg,
-    points: form.pts - rates.pts,
-    games: form.games,
-  };
+/** Human-readable phrasing that does not overstate what the data supports. */
+export function describeForm(delta: FormDelta): string | null {
+  const pct = Math.round(delta.minutesPct * 100);
+  if (pct >= 15) return `Playing time up ${pct}% over his season rate late in the year`;
+  const scoring = Math.round(delta.pointsPct * 100);
+  if (scoring >= 20) return `Scoring up ${scoring}% over his season rate down the stretch`;
+  return null;
 }

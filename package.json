@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "verify": "tsx scripts/verify-engine.ts"
+    "verify": "tsx scripts/verify-engine.ts",
+    "verify:league": "tsx scripts/verify-league.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.1",

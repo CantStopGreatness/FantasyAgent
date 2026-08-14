@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+/* ── CourtIQ design tokens ─────────────────────────────────────────────── */
+:root {
+  --bg: #0d1117;
+  --panel: #161b22;
+  --card: #1c232d;
+  --border: #2a3341;
+  --text: #f0f3f6;
+  --muted: #8b96a5;
+  --orange: #ff6b35;
+  --teal: #00c2d1;
+  --green: #2ecc71;
+  --red: #e6484f;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-card: var(--card);
+  --color-edge: var(--border);
+  --color-ink: var(--text);
+  --color-muted: var(--muted);
+  --color-orange: var(--orange);
+  --color-teal: var(--teal);
+  --color-green: var(--green);
+  --color-red: var(--red);
+
+  --font-display: var(--font-barlow), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* CourtIQ is a committed dark-surface product — no light variant. */
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Display face: condensed, tight, uppercase-friendly. */
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: 0.01em;
+}
+
+/* Tabular figures keep score columns from shifting as values change. */
+.nums {
+  font-variant-numeric: tabular-nums;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--orange) 35%, transparent);
+}
+
+/* Focus ring — visible on the dark ground without being loud. */
+:where(a, button, input, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

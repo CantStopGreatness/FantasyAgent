@@ -189,11 +189,18 @@ export type TradeBrief = {
   receiveName: string;
   receivePosition: string;
   receiveStats: string;
-  userNeed: string;
-  partnerNeed: string;
+  /** Null when the deal came from a stated goal rather than a positional read. */
+  userNeed: string | null;
+  partnerNeed: string | null;
   partnerTeamName: string;
   format: "category" | "points";
-  fairness: "even" | "you-give-up-value" | "you-gain-value";
+  fairness: "even" | "you-give-up-value" | "you-gain-value" | "worth-the-overpay";
+  /** The engine's one-line explanation of why this pair was picked. */
+  rationale: string;
+  /** Movement in the categories the manager asked to improve. */
+  goalDelta: { key: string; label: string; delta: number }[];
+  /** True when the manager named the player they wanted. */
+  targeted: boolean;
 };
 
 export async function tradeCommentary(
@@ -204,25 +211,52 @@ export async function tradeCommentary(
     even: "The two players grade out close to even on value.",
     "you-gain-value": "This slightly favors the manager you are advising.",
     "you-give-up-value": "This gives up a little value, but it fixes a real hole.",
+    "worth-the-overpay":
+      "This costs a little value on paper, and it is worth it for what the manager asked for.",
   }[brief.fairness];
 
-  const prompt = [
+  const lines = [
     `Trade partner: ${brief.partnerTeamName}.`,
     `The manager sends: ${brief.giveName}, ${brief.givePosition} — ${brief.giveStats}.`,
     `The manager receives: ${brief.receiveName}, ${brief.receivePosition} — ${brief.receiveStats}.`,
-    `Reason this works: the manager is thin at ${brief.userNeed} and deep at ${brief.partnerNeed}; ${brief.partnerTeamName} is the mirror image.`,
-    fairnessNote,
-    `Pitch this trade.`,
-  ].join("\n");
+    `Why this pair: ${brief.rationale}`,
+  ];
+
+  if (brief.targeted) {
+    lines.push(
+      `The manager specifically asked for ${brief.receiveName}, so this is about landing him at a price that works.`,
+    );
+  }
+  if (brief.goalDelta.length) {
+    const moves = brief.goalDelta
+      .map((g) => `${g.label} ${g.delta >= 0 ? "+" : ""}${g.delta.toFixed(1)} z`)
+      .join(", ");
+    lines.push(`The manager asked to improve: ${moves}. Lead with whether that actually lands.`);
+  }
+  if (brief.userNeed && brief.partnerNeed) {
+    lines.push(
+      `Positional read: the manager is thin at ${brief.userNeed}; ${brief.partnerTeamName} is thin at ${brief.partnerNeed}.`,
+    );
+  }
+  lines.push(fairnessNote, `Pitch this trade.`);
+
+  const goalPhrase = brief.goalDelta.length
+    ? `It moves ${brief.goalDelta.map((g) => g.label).join(" and ")} in the right direction`
+    : brief.userNeed && brief.partnerNeed
+      ? `You are starving at ${brief.userNeed} and ${brief.partnerTeamName} has the opposite problem`
+      : `It is the cleanest match in value on the board`;
 
   const fallback =
-    `You are deep at ${brief.partnerNeed} and starving at ${brief.userNeed} — ${brief.partnerTeamName} has the exact opposite problem. ` +
-    `Send ${brief.giveName}, get ${brief.receiveName}, and both rosters stop bleeding. That is how you win a trade without winning a trade.`;
+    `${goalPhrase}. Send ${brief.giveName}, get ${brief.receiveName}, and both rosters stop bleeding. ` +
+    `That is how you win a trade without winning a trade.`;
 
+  // The conditions are part of the identity of the pitch — the same swap
+  // argued for rebounds should not reuse a line written without a goal.
+  const goalKey = brief.goalDelta.map((g) => g.key).join("+");
   return generate(
-    `trade:${brief.format}:${brief.giveName}:${brief.receiveName}`,
+    `trade:${brief.format}:${brief.giveName}:${brief.receiveName}:${goalKey}:${brief.targeted}`,
     league,
-    prompt,
+    lines.join("\n"),
     fallback,
   );
 }

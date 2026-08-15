@@ -157,8 +157,8 @@ async function main() {
     mine.every((p, i) => i === 0 || mine[i - 1].score >= p.score),
   );
 
-  /* ── Trades ───────────────────────────────────────────────────────────── */
-  console.log(`\n[4] Trade engine`);
+  /* ── Trades: no conditions ────────────────────────────────────────────── */
+  console.log(`\n[4] Trade engine — no conditions`);
   let found = 0;
   let rejected = 0;
   for (const team of teams.slice(1)) {
@@ -169,10 +169,10 @@ async function main() {
       // The whole point of the rule: each side receives at the position it lacks.
       const giveGroup = groupFor(profile, p.give.position);
       const recvGroup = groupFor(profile, p.receive.position);
-      if (recvGroup !== p.userNeed || giveGroup !== p.partnerNeed) {
+      if (p.userNeed && (recvGroup !== p.userNeed || giveGroup !== p.partnerNeed)) {
         check(`trade vs ${team.teamName} addresses the stated needs`, false);
       }
-      if (found <= 3) {
+      if (found <= 2 && p.userNeed && p.partnerNeed) {
         console.log(
           `  vs ${team.teamName}: send ${name(p.give.playerId)} (${p.give.position}), ` +
             `get ${name(p.receive.playerId)} (${p.receive.position}) — ` +
@@ -191,6 +191,67 @@ async function main() {
 
   const self = suggestTrade(ctx, 1, "category");
   check("trading with yourself is rejected", !self.ok);
+
+  /* ── Trades: a stated goal ────────────────────────────────────────────── */
+  console.log(`\n[5] Trade engine — stated goal ("I want more rebounds")`);
+  let goalFound = 0;
+  let goalPositive = 0;
+  for (const team of teams.slice(1)) {
+    const result = suggestTrade(ctx, team.rosterId, "category", { wantCategories: ["reb"] });
+    if (!result.ok) continue;
+    goalFound++;
+    const p = result.proposal;
+    // The contract of a goal-driven trade: it must actually improve the goal.
+    if ((p.goalGain ?? 0) > 0) goalPositive++;
+    if (goalFound <= 2) {
+      const reb = p.goalDelta.find((g) => g.key === "reb");
+      console.log(
+        `  vs ${team.teamName}: send ${name(p.give.playerId)}, get ${name(p.receive.playerId)} — ` +
+          `REB ${reb && reb.delta >= 0 ? "+" : ""}${reb?.delta.toFixed(1)} z [${p.fairness}]`,
+      );
+    }
+  }
+  check("goal-driven trades are found", goalFound > 0, `${goalFound} teams`);
+  check(
+    "every goal-driven trade actually improves the goal",
+    goalFound > 0 && goalPositive === goalFound,
+    `${goalPositive}/${goalFound}`,
+  );
+
+  /* ── Trades: a named target ───────────────────────────────────────────── */
+  console.log(`\n[6] Trade engine — named target`);
+  const partner = getTeamRoster(ctx, 2, "category");
+  // Skip their best player: the engine deliberately refuses to shop him.
+  const wanted = partner[2];
+  const targeted = suggestTrade(ctx, 2, "category", { targetPlayerId: wanted.playerId });
+  check(
+    "targeting a player returns that exact player",
+    targeted.ok && targeted.proposal.receive.playerId === wanted.playerId,
+    targeted.ok ? `got ${name(targeted.proposal.receive.playerId)}` : "no trade",
+  );
+  if (targeted.ok) {
+    console.log(
+      `  asked for ${name(wanted.playerId)} -> send ${name(targeted.proposal.give.playerId)} ` +
+        `[${targeted.proposal.fairness}]`,
+    );
+  }
+
+  const bogus = suggestTrade(ctx, 2, "category", { targetPlayerId: "not-a-real-player" });
+  check("targeting someone not on that roster is refused", !bogus.ok);
+
+  // Protecting the natural counterparty must change the answer, not be ignored.
+  if (targeted.ok) {
+    const protectedRun = suggestTrade(ctx, 2, "category", {
+      targetPlayerId: wanted.playerId,
+      protectedPlayerIds: [targeted.proposal.give.playerId],
+    });
+    check(
+      "protected players are never offered",
+      !protectedRun.ok ||
+        protectedRun.proposal.give.playerId !== targeted.proposal.give.playerId,
+      protectedRun.ok ? `now sends ${name(protectedRun.proposal.give.playerId)}` : "no trade",
+    );
+  }
 
   console.log(`\n${"─".repeat(66)}`);
   if (failures) {

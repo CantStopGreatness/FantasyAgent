@@ -3,12 +3,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PersonaCallout } from "./PersonaCallout";
 import { PlayerList } from "./PlayerCards";
-import type { BoardResponse, ScoringFormat, Session, TradeResponse } from "@/lib/types";
+import { TradeConditions } from "./TradeConditions";
+import {
+  EMPTY_INTENT,
+  type BoardResponse,
+  type ScoringFormat,
+  type Session,
+  type TradeIntent,
+  type TradeResponse,
+} from "@/lib/types";
 
 const FAIRNESS_COPY: Record<string, { label: string; className: string }> = {
   even: { label: "Even value", className: "text-green" },
   "you-gain-value": { label: "Leans your way", className: "text-green" },
   "you-give-up-value": { label: "You give up a little value", className: "text-orange" },
+  "worth-the-overpay": { label: "Overpay worth making", className: "text-teal" },
 };
 
 export function TradePanel({ session }: { session: Session }) {
@@ -21,11 +30,15 @@ export function TradePanel({ session }: { session: Session }) {
   const [tradeLoading, setTradeLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // A suggestion is only valid for the team and format it was built for.
-  // Tagging it with that key retires it automatically when either changes,
-  // rather than clearing it from an effect.
+  const [intent, setIntent] = useState<TradeIntent>(EMPTY_INTENT);
+  const [myRoster, setMyRoster] = useState<BoardResponse | null>(null);
+
+  // A suggestion is only valid for the team, format, and conditions it was
+  // built for. Tagging it with that key retires it automatically when any of
+  // them change, rather than clearing it from an effect — change what you
+  // asked for and the deal on screen no longer answers the question.
   const [suggestion, setSuggestion] = useState<{ key: string; data: TradeResponse } | null>(null);
-  const tradeKey = `${selected}:${format}`;
+  const tradeKey = `${selected}:${format}:${JSON.stringify(intent)}`;
   const trade = suggestion?.key === tradeKey ? suggestion.data : null;
 
   const rosterCache = useRef(new Map<string, BoardResponse>());
@@ -80,6 +93,41 @@ export function TradePanel({ session }: { session: Session }) {
     if (selected !== null) void loadRoster(selected, format);
   }, [selected, format, loadRoster]);
 
+  // The manager's own roster backs the "off the table" list.
+  useEffect(() => {
+    if (myRoster || session.league.userTeamId === null) return;
+    let cancelled = false;
+    void (async () => {
+      if (session.leagueId === "demo") {
+        const { DEMO_BOARD_ROSTER } = await import("@/lib/demo");
+        if (!cancelled) setMyRoster(DEMO_BOARD_ROSTER);
+        return;
+      }
+      try {
+        const res = await fetch("/api/board", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            leagueId: session.leagueId,
+            userId: session.userId,
+            format: session.confirmedFormat,
+            ruleOverrides: session.ruleOverrides,
+            scoringOverrides: session.scoringOverrides,
+            view: "roster",
+            rosterId: session.league.userTeamId,
+          }),
+        });
+        const data = await res.json();
+        if (res.ok && !cancelled) setMyRoster(data);
+      } catch {
+        // Protect list is a convenience; its absence must not block trading.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [session, myRoster]);
+
   async function suggestTrade() {
     if (selected === null || tradeLoading) return;
 
@@ -103,6 +151,7 @@ export function TradePanel({ session }: { session: Session }) {
           format: session.confirmedFormat,
           ruleOverrides: session.ruleOverrides,
           scoringOverrides: session.scoringOverrides,
+          intent,
         }),
       });
       const data = await res.json();
@@ -165,6 +214,15 @@ export function TradePanel({ session }: { session: Session }) {
 
       {selectedTeam && (
         <>
+          <TradeConditions
+            intent={intent}
+            onChange={setIntent}
+            partnerRoster={roster?.players ?? []}
+            partnerTeamName={selectedTeam.teamName}
+            myRoster={myRoster?.players ?? []}
+            disabled={tradeLoading}
+          />
+
           <div className="flex flex-wrap items-center justify-between gap-4">
             <h2 className="font-display text-xl font-semibold uppercase tracking-wide">
               {selectedTeam.teamName}
@@ -174,7 +232,11 @@ export function TradePanel({ session }: { session: Session }) {
               disabled={tradeLoading || rosterLoading}
               className="rounded-lg bg-orange px-6 py-3 font-display text-sm font-semibold uppercase tracking-wide text-[#1a0d06] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {tradeLoading ? "Working the phones…" : "Suggest a trade"}
+              {tradeLoading
+                ? "Working the phones…"
+                : intent.wantCategories.length || intent.targetPlayerId
+                  ? "Find that trade"
+                  : "Suggest a trade"}
             </button>
           </div>
 
@@ -208,19 +270,52 @@ export function TradePanel({ session }: { session: Session }) {
                       />
                     </div>
 
-                    <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-edge pt-5 text-xs text-muted">
-                      <span>
-                        You&apos;re thin at{" "}
-                        <span className="text-ink">{trade.userNeed}</span>
-                      </span>
-                      <span>
-                        They&apos;re thin at{" "}
-                        <span className="text-ink">{trade.partnerNeed}</span>
-                      </span>
+                    {/* What the manager asked for, and whether it landed. */}
+                    {trade.goalDelta.length > 0 && (
+                      <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-edge pt-5">
+                        <span className="text-xs uppercase tracking-[0.12em] text-muted">
+                          You asked for
+                        </span>
+                        {trade.goalDelta.map((g) => (
+                          <span
+                            key={g.key}
+                            className={`nums rounded-md px-2 py-0.5 text-xs font-medium ${
+                              g.delta >= 0 ? "bg-green/10 text-green" : "bg-red/10 text-red"
+                            }`}
+                          >
+                            {g.label} {g.delta >= 0 ? "+" : ""}
+                            {g.delta.toFixed(1)} z
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <div
+                      className={`flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-muted ${
+                        trade.goalDelta.length > 0
+                          ? "mt-4"
+                          : "mt-6 border-t border-edge pt-5"
+                      }`}
+                    >
+                      {trade.userNeed && trade.partnerNeed && (
+                        <>
+                          <span>
+                            You&apos;re thin at <span className="text-ink">{trade.userNeed}</span>
+                          </span>
+                          <span>
+                            They&apos;re thin at{" "}
+                            <span className="text-ink">{trade.partnerNeed}</span>
+                          </span>
+                        </>
+                      )}
                       <span className={FAIRNESS_COPY[trade.fairness]?.className}>
-                        {FAIRNESS_COPY[trade.fairness]?.label}
+                        {FAIRNESS_COPY[trade.fairness]?.label ?? trade.fairness}
                       </span>
                     </div>
+
+                    <p className="mt-4 border-t border-edge pt-4 text-xs leading-relaxed text-muted">
+                      {trade.rationale}
+                    </p>
                   </div>
 
                   <PersonaCallout commentary={trade.commentary} />

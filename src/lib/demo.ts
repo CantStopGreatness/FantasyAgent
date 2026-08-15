@@ -300,6 +300,13 @@ export const DEMO_TRADE: TradeResponse = {
   userNeed: "blocks and rebounds",
   partnerNeed: "assists and steals",
   fairness: "you-gain-value",
+  goalDelta: [
+    { key: "reb", label: "REB", delta: 1.8 },
+    { key: "blk", label: "BLK", delta: 2.3 },
+  ],
+  goalGain: 4.1,
+  rationale:
+    "You asked for rebounds and blocks: Sabonis adds both, and Fox was your least productive piece there.",
   commentary: {
     text: "This trade works because your roster is elite in assists and steals but ranks near the bottom in blocks and rebounds. Hoop Dreams has the opposite problem. Davis fills your two weakest categories at an elite level, and Fox is a fair price — he is your fourth-best player but their biggest need.",
     fallback: false,

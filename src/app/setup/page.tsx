@@ -161,7 +161,7 @@ export default function Setup() {
           Connect your league
         </h1>
         <p className="mt-3 max-w-lg text-muted">
-          CourtIQ reads your league straight from Sleeper — rosters, scoring settings, and the
+          CourtIQ reads your league straight from Sleeper: rosters, scoring settings, and the
           rules that decide what a good move actually is.
         </p>
 
@@ -380,7 +380,7 @@ function ConfirmLeague({
 
       {league.userTeamId === null && (
         <p className="mt-7 rounded-lg border border-edge bg-card px-5 py-4 text-sm text-muted">
-          We could not tell which team is yours — import by username instead of league ID to
+          We could not tell which team is yours, import by username instead of league ID to
           unlock My Team and trade suggestions.
         </p>
       )}
@@ -390,7 +390,7 @@ function ConfirmLeague({
         disabled={busy}
         className="mt-7 w-full rounded-lg bg-orange px-7 py-4 font-display text-lg font-semibold uppercase tracking-wide text-[#1a0d06] transition hover:brightness-110 disabled:opacity-40 sm:w-auto"
       >
-        Looks right — continue →
+        Looks right, continue →
       </button>
     </section>
   );

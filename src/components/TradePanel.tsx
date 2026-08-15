@@ -38,6 +38,14 @@ export function TradePanel({ session }: { session: Session }) {
         setRoster(cached);
         return;
       }
+
+      // Demo mode — return pre-built roster data.
+      if (session.leagueId === "demo") {
+        const { DEMO_ROSTER_PARTNER } = await import("@/lib/demo");
+        setRoster(DEMO_ROSTER_PARTNER);
+        return;
+      }
+
       setRosterLoading(true);
       setError(null);
       try {
@@ -74,6 +82,14 @@ export function TradePanel({ session }: { session: Session }) {
 
   async function suggestTrade() {
     if (selected === null || tradeLoading) return;
+
+    // Demo mode — return pre-built trade.
+    if (session.leagueId === "demo") {
+      const { DEMO_TRADE } = await import("@/lib/demo");
+      setSuggestion({ key: tradeKey, data: DEMO_TRADE });
+      return;
+    }
+
     setTradeLoading(true);
     setError(null);
     try {

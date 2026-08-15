@@ -39,7 +39,7 @@ export type SleeperLeagueUser = {
   metadata: { team_name?: string } | null;
 };
 
-/** One entry from GET /v1/players/nba — trimmed to the fields we actually use. */
+/** One entry from GET /v1/players/{sport} — trimmed to the fields we actually use. */
 export type SleeperPlayer = {
   player_id: string;
   full_name: string | null;

@@ -1,3 +1,5 @@
+import type { SportProfile } from "@/lib/sports";
+import { rateOf } from "./rates";
 import type { Recommendation } from "./recommend";
 import type { ScoringFormat } from "./scoring";
 
@@ -9,12 +11,10 @@ export type PlayerCard = {
   team: string;
   rank: number;
   score: number;
-  /** Formatted for display so the client never re-derives scoring units. */
   scoreLabel: string;
   statLine: string;
   injuryStatus: string | null;
   tags: { label: string; tone: "hot" | "good" | "warn" }[];
-  /** Rank movement vs the other scoring format; null when not comparable. */
   rankDelta: number | null;
   otherFormatRank: number | null;
   topCategories: { label: string; z: number }[];
@@ -32,12 +32,31 @@ export function scoreLabel(score: number, format: ScoringFormat): string {
     : score.toFixed(1);
 }
 
-export function statLine(rec: Recommendation): string {
-  const r = rec.rates;
-  return `${r.pts.toFixed(1)} PTS · ${r.reb.toFixed(1)} REB · ${r.ast.toFixed(1)} AST · ${(r.fgPct * 100).toFixed(0)}% FG`;
+/**
+ * A short per-game line for the card.
+ *
+ * Built from the profile's counting categories so a new sport gets a sensible
+ * line without touching this file, with the sport's headline ratio appended
+ * when it has one.
+ */
+export function statLine(profile: SportProfile, rec: Recommendation): string {
+  const counting = profile.categories
+    .filter((c) => !c.invert && !c.volumeWeighted)
+    .slice(0, 3)
+    .map((c) => `${rateOf(rec.rates, c.key).toFixed(1)} ${c.label}`);
+
+  const ratio = profile.categories.find((c) => c.volumeWeighted);
+  if (ratio) {
+    counting.push(`${(rateOf(rec.rates, ratio.key) * 100).toFixed(0)}% ${ratio.label}`);
+  }
+  return counting.join(" · ");
 }
 
-export function toCard(rec: Recommendation, format: ScoringFormat): PlayerCard {
+export function toCard(
+  profile: SportProfile,
+  rec: Recommendation,
+  format: ScoringFormat,
+): PlayerCard {
   return {
     playerId: rec.playerId,
     name: rec.name,
@@ -46,7 +65,7 @@ export function toCard(rec: Recommendation, format: ScoringFormat): PlayerCard {
     rank: rec.rank,
     score: rec.score,
     scoreLabel: scoreLabel(rec.score, format),
-    statLine: statLine(rec),
+    statLine: statLine(profile, rec),
     injuryStatus: rec.injuryStatus,
     tags: rec.tags,
     rankDelta: rec.rankDelta,

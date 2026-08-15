@@ -1,7 +1,7 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import { SleeperError } from "./sleeper/client";
-import type { ScoringFormat } from "./nba/scoring";
+import type { ScoringFormat } from "./engine/scoring";
 
 /** Turn any thrown error into a response the UI can show a human. */
 export function errorResponse(err: unknown) {
@@ -15,11 +15,15 @@ export function errorResponse(err: unknown) {
   );
 }
 
-export function parseFormat(value: unknown): ScoringFormat {
-  return value === "points" ? "points" : "category";
-}
-
-/** One decimal, no trailing ".0" noise in the UI. */
-export function fmt(n: number, digits = 1): string {
-  return n.toFixed(digits);
+/**
+ * A confirmed format correction from the setup screen, or null to use the
+ * league's own detected value.
+ *
+ * Deliberately not a general "pick a format" parameter — the format belongs to
+ * the league. This exists only so a user can fix a bad inference, since Sleeper
+ * publishes no category-vs-points flag for us to read.
+ */
+export function parseFormatOverride(value: unknown): ScoringFormat | null {
+  if (value === "points" || value === "category") return value;
+  return null;
 }

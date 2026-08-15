@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
-import { getAnalysis } from "@/lib/nba/context-cache";
-import { getSleepers, getTeamRoster, getWaiverRecommendations } from "@/lib/nba/recommend";
-import { strengthsPhrase, statLine, toCard, weaknessPhrase } from "@/lib/nba/serialize";
-import { sleeperCommentary, waiverCommentary } from "@/lib/ai/persona";
-import { errorResponse, parseFormat } from "@/lib/api-helpers";
+import { getAnalysis } from "@/lib/engine/context-cache";
+import { getSleepers, getTeamRoster, getWaiverRecommendations } from "@/lib/engine/recommend";
+import { strengthsPhrase, statLine, toCard, weaknessPhrase } from "@/lib/engine/serialize";
+import { rulesForPrompt } from "@/lib/engine/settings";
+import { sleeperCommentary, waiverCommentary, type LeagueContext } from "@/lib/ai/persona";
+import { errorResponse, parseFormatOverride } from "@/lib/api-helpers";
+import type { AnalysisContext } from "@/lib/engine/recommend";
 
 export const runtime = "nodejs";
 // The persona call can take a few seconds; give the route room.
@@ -12,16 +14,24 @@ export const maxDuration = 60;
 type Body = {
   leagueId?: string;
   userId?: string | null;
-  format?: string;
+  format?: string | null;
   view?: "waivers" | "sleepers" | "roster";
   rosterId?: number;
 };
 
+/** The league's own rules, rendered for the analyst prompt. */
+function leagueContext(ctx: AnalysisContext): LeagueContext {
+  return {
+    sportNoun: ctx.profile.noun,
+    rules: rulesForPrompt(ctx.snapshot.rules, ctx.snapshot.currentWeek),
+  };
+}
+
 /**
  * One endpoint for every ranked list in the app.
  *
- * All three views re-rank under the active format, which is what makes the
- * toggle meaningful everywhere rather than only on the waiver board.
+ * The format is the league's, not a request-time preference — callers may pass
+ * a confirmed override from the setup screen, but never an arbitrary choice.
  */
 export async function POST(request: Request) {
   try {
@@ -30,8 +40,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing league." }, { status: 400 });
     }
 
-    const format = parseFormat(body.format);
-    const ctx = await getAnalysis(body.leagueId.trim(), body.userId?.trim() || null);
+    const ctx = await getAnalysis(
+      body.leagueId.trim(),
+      body.userId?.trim() || null,
+      parseFormatOverride(body.format),
+    );
+    const format = ctx.snapshot.format;
     const view = body.view ?? "waivers";
 
     if (view === "roster") {
@@ -50,7 +64,7 @@ export async function POST(request: Request) {
         team: team
           ? { rosterId: team.rosterId, teamName: team.teamName, ownerName: team.ownerName }
           : null,
-        players: roster.map((r) => toCard(r, format)),
+        players: roster.map((r) => toCard(ctx.profile, r, format)),
         // A roster can hold players with no scoreable stats (rookies, two-way
         // deals). Say so rather than silently showing a short list.
         unscored: team ? team.playerIds.length - roster.length : 0,
@@ -61,20 +75,26 @@ export async function POST(request: Request) {
       const sleepers = getSleepers(ctx, format, 8);
       const top = sleepers[0];
       const commentary = top
-        ? await sleeperCommentary({
-            name: top.name,
-            position: top.position,
-            team: top.team,
-            reason: top.sleeperReason,
-            statLine: statLine(top),
-            format,
-          })
+        ? await sleeperCommentary(
+            {
+              name: top.name,
+              position: top.position,
+              team: top.team,
+              reason: top.sleeperReason,
+              statLine: statLine(ctx.profile, top),
+              format,
+            },
+            leagueContext(ctx),
+          )
         : null;
 
       return NextResponse.json({
         view,
         format,
-        players: sleepers.map((s) => ({ ...toCard(s, format), reason: s.sleeperReason })),
+        players: sleepers.map((s) => ({
+          ...toCard(ctx.profile, s, format),
+          reason: s.sleeperReason,
+        })),
         commentary,
       });
     }
@@ -82,24 +102,27 @@ export async function POST(request: Request) {
     const waivers = getWaiverRecommendations(ctx, format, 12);
     const top = waivers[0];
     const commentary = top
-      ? await waiverCommentary({
-          name: top.name,
-          position: top.position,
-          team: top.team,
-          format,
-          rank: top.rank,
-          statLine: statLine(top),
-          strengths: strengthsPhrase(top),
-          weakness: weaknessPhrase(top),
-          rankDelta: top.rankDelta,
-          tags: top.tags.map((t) => t.label),
-        })
+      ? await waiverCommentary(
+          {
+            name: top.name,
+            position: top.position,
+            team: top.team,
+            format,
+            rank: top.rank,
+            statLine: statLine(ctx.profile, top),
+            strengths: strengthsPhrase(top),
+            weakness: weaknessPhrase(top),
+            rankDelta: top.rankDelta,
+            tags: top.tags.map((t) => t.label),
+          },
+          leagueContext(ctx),
+        )
       : null;
 
     return NextResponse.json({
       view: "waivers",
       format,
-      players: waivers.map((w) => toCard(w, format)),
+      players: waivers.map((w) => toCard(ctx.profile, w, format)),
       commentary,
     });
   } catch (err) {

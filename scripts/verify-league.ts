@@ -2,16 +2,23 @@
  * Exercises the full recommendation pipeline against a synthetic league built
  * from real Sleeper stats — waivers, sleepers, rosters, and the trade engine.
  *
- * This covers the logic a live league would exercise without needing anyone's
+ * Covers the logic a live league would exercise without needing anyone's
  * credentials. Run with `npm run verify:league`.
  */
 import { getPlayers, getSeasonStats } from "../src/lib/sleeper/client";
-import { fantasyRelevant, ratesFromStats } from "../src/lib/nba/rates";
-import { computeNorms, rankPlayers } from "../src/lib/nba/scoring";
-import type { LeagueSnapshot, LeagueTeam } from "../src/lib/nba/league";
-import { buildAnalysis, getSleepers, getTeamRoster, getWaiverRecommendations } from "../src/lib/nba/recommend";
-import { groupFor, groupLabel, suggestTrade } from "../src/lib/nba/trade";
+import { fantasyRelevant, ratesFromStats } from "../src/lib/engine/rates";
+import { computeNorms, rankPlayers } from "../src/lib/engine/scoring";
+import type { LeagueSnapshot, LeagueTeam } from "../src/lib/engine/league";
+import {
+  buildAnalysis,
+  getSleepers,
+  getTeamRoster,
+  getWaiverRecommendations,
+} from "../src/lib/engine/recommend";
+import { groupFor, groupLabel, suggestTrade } from "../src/lib/engine/trade";
+import { nbaProfile } from "../src/lib/sports";
 
+const profile = nbaProfile;
 const SEASON = process.env.COURTIQ_SEASON ?? "2025";
 const TEAM_COUNT = 10;
 const ROSTER_SIZE = 12;
@@ -23,16 +30,23 @@ function check(label: string, ok: boolean, detail = "") {
 }
 
 async function main() {
-  console.log(`\nCourtIQ league pipeline (synthetic ${TEAM_COUNT}-team league)\n${"─".repeat(66)}`);
+  console.log(
+    `\nCourtIQ league pipeline — synthetic ${TEAM_COUNT}-team ${profile.label} league\n${"─".repeat(66)}`,
+  );
 
-  const [players, stats] = await Promise.all([getPlayers(), getSeasonStats(SEASON)]);
-  const rates = ratesFromStats(stats);
-  const norms = computeNorms(rates.values());
-  const pool = fantasyRelevant(rates.values()).filter((r) => players[r.playerId]?.active);
+  const [players, stats] = await Promise.all([
+    getPlayers(profile.id),
+    getSeasonStats(profile.id, SEASON),
+  ]);
+  const rates = ratesFromStats(profile, stats);
+  const norms = computeNorms(profile, rates.values());
+  const pool = fantasyRelevant(profile, rates.values()).filter(
+    (r) => players[r.playerId]?.active,
+  );
 
-  // Draft snake-style off the category board so rosters look like a real league:
-  // strong teams at the top, and positional scarcity emerging naturally.
-  const board = rankPlayers(pool, "category", norms);
+  // Draft snake-style off the category board so rosters look like a real
+  // league: strong teams at the top, positional scarcity emerging naturally.
+  const board = rankPlayers(profile, pool, "category", norms, profile.defaultPointsSettings);
   const rosters: string[][] = Array.from({ length: TEAM_COUNT }, () => []);
   let pick = 0;
   for (let round = 0; round < ROSTER_SIZE; round++) {
@@ -56,14 +70,23 @@ async function main() {
     leagueId: "synthetic",
     name: "CourtIQ Test League",
     season: SEASON,
+    sport: profile.id,
     teamCount: TEAM_COUNT,
-    detectedFormat: "category",
+    format: "category",
+    rules: {
+      format: "category",
+      formatInferred: false,
+      rosterSize: 10,
+      settings: [],
+      raw: {},
+    },
     scoringSettings: null,
     rosterPositions: null,
     teams,
     rosteredIds: [...new Set(rosters.flat())],
     userTeamId: 1,
     statsSeason: SEASON,
+    currentWeek: null,
   };
 
   const ctx = await buildAnalysis(snapshot);
@@ -84,13 +107,9 @@ async function main() {
   const catTop = catWaivers.map((w) => w.playerId);
   const ptsTop = ptsWaivers.map((w) => w.playerId);
   const overlap = catTop.filter((id) => ptsTop.includes(id)).length;
-  check(
-    "the two formats disagree on the top 12",
-    overlap < 12,
-    `${12 - overlap} of 12 differ`,
-  );
+  check("the two formats disagree on the top 12", overlap < 12, `${12 - overlap} of 12 differ`);
 
-  console.log(`\n  9-CAT top 5                     |  POINTS top 5`);
+  console.log(`\n  CATEGORY top 5                  |  POINTS top 5`);
   console.log(`  ${"-".repeat(31)} |  ${"-".repeat(31)}`);
   for (let i = 0; i < 5; i++) {
     const c = catWaivers[i];
@@ -100,13 +119,15 @@ async function main() {
     console.log(`  ${left.padEnd(31)} |  ${right}`);
   }
 
+  // The cross-format delta is what replaces the old toggle as the visible
+  // intelligence, so assert the cards actually carry it.
   const movers = catWaivers
     .filter((w) => w.rankDelta !== null && Math.abs(w.rankDelta) >= 8)
     .slice(0, 3);
   check("waiver cards surface cross-format rank movement", movers.length > 0);
   for (const m of movers) {
     console.log(
-      `  ${name(m.playerId)} moves ${m.rankDelta! > 0 ? "+" : ""}${m.rankDelta} between formats`,
+      `  ${name(m.playerId)} rates ${m.rankDelta! > 0 ? "+" : ""}${m.rankDelta} vs the other format`,
     );
   }
 
@@ -125,8 +146,15 @@ async function main() {
   /* ── Rosters ──────────────────────────────────────────────────────────── */
   console.log(`\n[3] Rosters`);
   const mine = getTeamRoster(ctx, 1, "category");
-  check("user roster scores every drafted player", mine.length === ROSTER_SIZE, `${mine.length}/${ROSTER_SIZE}`);
-  check("roster is sorted best-first", mine.every((p, i) => i === 0 || mine[i - 1].score >= p.score));
+  check(
+    "user roster scores every drafted player",
+    mine.length === ROSTER_SIZE,
+    `${mine.length}/${ROSTER_SIZE}`,
+  );
+  check(
+    "roster is sorted best-first",
+    mine.every((p, i) => i === 0 || mine[i - 1].score >= p.score),
+  );
 
   /* ── Trades ───────────────────────────────────────────────────────────── */
   console.log(`\n[4] Trade engine`);
@@ -137,9 +165,9 @@ async function main() {
     if (result.ok) {
       found++;
       const p = result.proposal;
-      const giveGroup = groupFor(p.give.position);
-      const recvGroup = groupFor(p.receive.position);
       // The whole point of the rule: each side receives at the position it lacks.
+      const giveGroup = groupFor(profile, p.give.position);
+      const recvGroup = groupFor(profile, p.receive.position);
       if (recvGroup !== p.userNeed || giveGroup !== p.partnerNeed) {
         check(`trade vs ${team.teamName} addresses the stated needs`, false);
       }
@@ -147,15 +175,18 @@ async function main() {
         console.log(
           `  vs ${team.teamName}: send ${name(p.give.playerId)} (${p.give.position}), ` +
             `get ${name(p.receive.playerId)} (${p.receive.position}) — ` +
-            `you need ${groupLabel(p.userNeed)}, they need ${groupLabel(p.partnerNeed)} [${p.fairness}]`,
+            `you need ${groupLabel(profile, p.userNeed)}, they need ${groupLabel(profile, p.partnerNeed)} [${p.fairness}]`,
         );
       }
     } else {
       rejected++;
     }
   }
-  check("engine produces trades across the league", found > 0, `${found} found, ${rejected} declined`);
-  check("declines are explained, not silent", true);
+  check(
+    "engine produces trades across the league",
+    found > 0,
+    `${found} found, ${rejected} declined`,
+  );
 
   const self = suggestTrade(ctx, 1, "category");
   check("trading with yourself is rejected", !self.ok);

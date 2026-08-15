@@ -3,17 +3,12 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FormatToggle } from "@/components/FormatToggle";
+import { LeagueBadge } from "@/components/LeagueBadge";
 import { PersonaCallout } from "@/components/PersonaCallout";
 import { HeroCard, PlayerList } from "@/components/PlayerCards";
 import { TradePanel } from "@/components/TradePanel";
 import { useSession } from "@/lib/useSession";
-import {
-  clearSession,
-  type BoardResponse,
-  type ScoringFormat,
-  type Session,
-} from "@/lib/types";
+import { clearSession, type BoardResponse, type Session } from "@/lib/types";
 
 type Tab = "waivers" | "sleepers" | "team" | "trades";
 
@@ -29,23 +24,15 @@ export default function Dashboard() {
   const session = useSession();
   const [tab, setTab] = useState<Tab>("waivers");
 
-  // The league's detected format is the starting position; the toggle takes
-  // over once the user touches it. Deriving rather than syncing keeps the
-  // session load from having to write into state.
-  const [chosenFormat, setChosenFormat] = useState<ScoringFormat | null>(null);
-  const format: ScoringFormat = chosenFormat ?? session?.league.detectedFormat ?? "category";
-
   const [board, setBoard] = useState<BoardResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Boards are pure functions of (view, format) — hold them so flipping the
-  // toggle back and forth is instant rather than a fresh round trip.
+  // Boards are a pure function of the view, so hold them across tab switches.
   const cache = useRef(new Map<string, BoardResponse>());
 
-  // A visitor who lands here without an imported league belongs on /setup.
-  // useSession reports null on the first hydration pass too, so wait a tick
-  // before deciding the session is genuinely absent.
+  // A visitor without an imported league belongs on /setup. useSession reports
+  // null on the first hydration pass too, so wait a tick before deciding.
   const [checkedStorage, setCheckedStorage] = useState(false);
   useEffect(() => {
     if (session) return;
@@ -58,10 +45,9 @@ export default function Dashboard() {
   }, [checkedStorage, session, router]);
 
   const fetchBoard = useCallback(
-    async (view: "waivers" | "sleepers" | "roster", fmt: ScoringFormat) => {
+    async (view: "waivers" | "sleepers" | "roster") => {
       if (!session) return;
-      const key = `${view}:${fmt}`;
-      const cached = cache.current.get(key);
+      const cached = cache.current.get(view);
       if (cached) {
         setBoard(cached);
         setError(null);
@@ -77,14 +63,14 @@ export default function Dashboard() {
           body: JSON.stringify({
             leagueId: session.leagueId,
             userId: session.userId,
-            format: fmt,
+            format: session.confirmedFormat,
             view,
             rosterId: view === "roster" ? session.league.userTeamId : undefined,
           }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Could not load recommendations.");
-        cache.current.set(key, data);
+        cache.current.set(view, data);
         setBoard(data);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong.");
@@ -98,9 +84,8 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!session || tab === "trades") return;
-    const view = tab === "team" ? "roster" : tab;
-    void fetchBoard(view, format);
-  }, [session, tab, format, fetchBoard]);
+    void fetchBoard(tab === "team" ? "roster" : tab);
+  }, [session, tab, fetchBoard]);
 
   if (!session) {
     return (
@@ -130,7 +115,7 @@ export default function Dashboard() {
             </p>
           </div>
 
-          <FormatToggle value={format} onChange={setChosenFormat} disabled={loading} />
+          <LeagueBadge league={league} settings={session.settings} />
 
           <button
             onClick={() => {
@@ -165,18 +150,15 @@ export default function Dashboard() {
 
       <div className="mx-auto max-w-5xl px-6 py-10">
         {error && (
-          <div
-            role="alert"
-            className="rounded-xl border border-red/40 bg-red/10 px-6 py-5 text-sm"
-          >
+          <div role="alert" className="rounded-xl border border-red/40 bg-red/10 px-6 py-5 text-sm">
             {error}
           </div>
         )}
 
         {tab === "trades" ? (
-          <TradePanel session={session} format={format} />
+          <TradePanel session={session} />
         ) : (
-          <BoardView tab={tab} board={board} loading={loading} format={format} league={league} />
+          <BoardView tab={tab} board={board} loading={loading} session={session} />
         )}
       </div>
     </main>
@@ -187,15 +169,16 @@ function BoardView({
   tab,
   board,
   loading,
-  format,
-  league,
+  session,
 }: {
   tab: Tab;
   board: BoardResponse | null;
   loading: boolean;
-  format: ScoringFormat;
-  league: Session["league"];
+  session: Session;
 }) {
+  const { league } = session;
+  const formatWord = league.format === "category" ? "category" : "points";
+
   const heading =
     tab === "waivers"
       ? "Best available"
@@ -205,10 +188,10 @@ function BoardView({
 
   const blurb =
     tab === "waivers"
-      ? `Unrostered players ranked for ${format === "category" ? "9-category" : "points"} scoring.`
+      ? `Unrostered players, ranked for your league's ${formatWord} scoring.`
       : tab === "sleepers"
         ? "Under-owned players whose role is growing."
-        : "Your roster, scored under the active format.";
+        : "Your roster, scored under your league's rules.";
 
   if (tab === "team" && league.userTeamId === null) {
     return (
@@ -244,19 +227,19 @@ function BoardView({
           )}
 
           {tab === "waivers" && (
-            <HeroCard card={board.players[0]} format={format} label="Top pickup" />
+            <HeroCard card={board.players[0]} format={league.format} label="Top pickup" />
           )}
 
           <PlayerList
             cards={tab === "waivers" ? board.players.slice(1) : board.players}
-            format={format}
+            format={league.format}
           />
 
           {board.unscored ? (
             <p className="text-xs text-muted">
               {board.unscored} player{board.unscored === 1 ? "" : "s"} on this roster had no
-              scoreable stats for {league.statsSeason} and {board.unscored === 1 ? "is" : "are"} not
-              listed.
+              scoreable stats for {league.statsSeason} and{" "}
+              {board.unscored === 1 ? "is" : "are"} not listed.
             </p>
           ) : null}
         </>

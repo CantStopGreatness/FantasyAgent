@@ -88,10 +88,11 @@ export async function getUser(username: string): Promise<SleeperUser | null> {
 }
 
 export async function getLeaguesForUser(
+  sport: string,
   userId: string,
   season: string,
 ): Promise<SleeperLeague[]> {
-  return (await getJSON<SleeperLeague[]>(`/user/${userId}/leagues/nba/${season}`)) ?? [];
+  return (await getJSON<SleeperLeague[]>(`/user/${userId}/leagues/${sport}/${season}`)) ?? [];
 }
 
 export async function getLeague(leagueId: string): Promise<SleeperLeague | null> {
@@ -106,33 +107,32 @@ export async function getLeagueUsers(leagueId: string): Promise<SleeperLeagueUse
   return (await getJSON<SleeperLeagueUser[]>(`/league/${leagueId}/users`)) ?? [];
 }
 
-export async function getNBAState(): Promise<{
+export type SportState = {
   season: string;
   previous_season: string;
   season_type: string;
   display_week: number;
-}> {
-  const state = await getJSON<{
-    season: string;
-    previous_season: string;
-    season_type: string;
-    display_week: number;
-  }>("/state/nba");
-  if (!state) throw new SleeperError("Could not read NBA season state from Sleeper");
+};
+
+export async function getSportState(sport: string): Promise<SportState> {
+  const state = await getJSON<SportState>(`/state/${sport}`);
+  if (!state) {
+    throw new SleeperError(`Could not read ${sport.toUpperCase()} season state from Sleeper`);
+  }
   return state;
 }
 
 /**
- * Full NBA player dictionary, trimmed to the ~10 fields we use.
+ * Full player dictionary for a sport, trimmed to the ~10 fields we use.
  *
  * Sleeper explicitly asks callers not to hammer this endpoint; we hold it for
  * a day. Trimming drops the payload from ~2.4MB to a few hundred KB, which
  * matters because this gets held in memory for the life of the process.
  */
-export async function getPlayers(): Promise<Record<string, SleeperPlayer>> {
-  return cached("players-nba", DAY, async () => {
-    const raw = await getJSON<Record<string, Record<string, unknown>>>("/players/nba");
-    if (!raw) throw new SleeperError("Could not load the NBA player dictionary");
+export async function getPlayers(sport: string): Promise<Record<string, SleeperPlayer>> {
+  return cached(`players-${sport}`, DAY, async () => {
+    const raw = await getJSON<Record<string, Record<string, unknown>>>(`/players/${sport}`);
+    if (!raw) throw new SleeperError(`Could not load the ${sport.toUpperCase()} player dictionary`);
 
     const trimmed: Record<string, SleeperPlayer> = {};
     for (const [id, p] of Object.entries(raw)) {
@@ -162,30 +162,39 @@ export async function getPlayers(): Promise<Record<string, SleeperPlayer>> {
 }
 
 /** Season-long stat totals for every player, keyed by Sleeper player ID. */
-export async function getSeasonStats(season: string): Promise<StatsBySeason> {
-  return cached(`stats-nba-${season}`, DAY, async () => {
-    const raw = await getJSON<StatsBySeason>(`/stats/nba/regular/${season}`);
-    if (!raw) throw new SleeperError(`No NBA stats available for the ${season} season`);
+export async function getSeasonStats(sport: string, season: string): Promise<StatsBySeason> {
+  return cached(`stats-${sport}-${season}`, DAY, async () => {
+    const raw = await getJSON<StatsBySeason>(`/stats/${sport}/regular/${season}`);
+    if (!raw) {
+      throw new SleeperError(
+        `No ${sport.toUpperCase()} stats available for the ${season} season`,
+      );
+    }
     return raw;
   });
 }
 
 /** Per-week stat totals — used to derive recent-form trends. */
-export async function getWeekStats(season: string, week: number): Promise<StatsBySeason> {
-  return cached(`stats-nba-${season}-w${week}`, DAY, async () => {
-    return (await getJSON<StatsBySeason>(`/stats/nba/regular/${season}/${week}`)) ?? {};
+export async function getWeekStats(
+  sport: string,
+  season: string,
+  week: number,
+): Promise<StatsBySeason> {
+  return cached(`stats-${sport}-${season}-w${week}`, DAY, async () => {
+    return (await getJSON<StatsBySeason>(`/stats/${sport}/regular/${season}/${week}`)) ?? {};
   });
 }
 
-/** Players most added across all Sleeper NBA leagues — a real "buzz" signal. */
+/** Players most added across all Sleeper leagues for a sport — a real "buzz" signal. */
 export async function getTrendingAdds(
+  sport: string,
   lookbackHours = 168,
   limit = 60,
 ): Promise<Record<string, number>> {
   try {
     const rows =
       (await getJSON<{ player_id: string; count: number }[]>(
-        `/players/nba/trending/add?lookback_hours=${lookbackHours}&limit=${limit}`,
+        `/players/${sport}/trending/add?lookback_hours=${lookbackHours}&limit=${limit}`,
       )) ?? [];
     return Object.fromEntries(rows.map((r) => [r.player_id, r.count]));
   } catch {

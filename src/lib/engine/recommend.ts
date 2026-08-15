@@ -1,15 +1,13 @@
 import { getPlayers, getSeasonStats, getTrendingAdds } from "@/lib/sleeper/client";
 import type { SleeperPlayer } from "@/lib/sleeper/types";
+import { getProfile, rateOf, type SportProfile } from "@/lib/sports";
 import { describeForm, getRecentForm, type FormDelta } from "./form";
 import { fantasyRelevant, ratesFromStats, type PlayerRates } from "./rates";
 import {
-  CATEGORY_KEYS,
-  CATEGORY_LABELS,
+  categoryLabels,
   categoryZScores,
   computeNorms,
-  DEFAULT_POINTS_SETTINGS,
   rankPlayers,
-  type CategoryKey,
   type CategoryNorms,
   type ScoringFormat,
 } from "./scoring";
@@ -35,10 +33,9 @@ export type Recommendation = {
   /** Positive means this format rates them higher than the other one does. */
   rankDelta: number | null;
   rates: PlayerRates;
-  zScores: Record<CategoryKey, number> | null;
-  /** Strongest and weakest categories, for the card's stat strip. */
-  bestCategories: { key: CategoryKey; label: string; z: number }[];
-  worstCategory: { key: CategoryKey; label: string; z: number } | null;
+  zScores: Record<string, number> | null;
+  bestCategories: { key: string; label: string; z: number }[];
+  worstCategory: { key: string; label: string; z: number } | null;
   buzz: number;
   form: FormDelta | null;
   tags: ReasonTag[];
@@ -47,6 +44,7 @@ export type Recommendation = {
 /** Everything needed to answer any ranking question about one league. */
 export type AnalysisContext = {
   snapshot: LeagueSnapshot;
+  profile: SportProfile;
   players: Record<string, SleeperPlayer>;
   rates: Map<string, PlayerRates>;
   norms: CategoryNorms;
@@ -59,34 +57,47 @@ export type AnalysisContext = {
 };
 
 export async function buildAnalysis(snapshot: LeagueSnapshot): Promise<AnalysisContext> {
+  const profile = getProfile(snapshot.sport);
+  if (!profile) throw new Error(`No scoring profile for ${snapshot.sport}`);
+
   const [players, stats, form, buzz] = await Promise.all([
-    getPlayers(),
-    getSeasonStats(snapshot.statsSeason),
-    getRecentForm(snapshot.statsSeason),
-    getTrendingAdds(),
+    getPlayers(profile.id),
+    getSeasonStats(profile.id, snapshot.statsSeason),
+    getRecentForm(profile.id, snapshot.statsSeason),
+    getTrendingAdds(profile.id),
   ]);
 
-  const rates = ratesFromStats(stats);
-  const norms = computeNorms(rates.values());
-  const pool = fantasyRelevant(rates.values());
+  const rates = ratesFromStats(profile, stats);
+  const norms = computeNorms(profile, rates.values());
+  const pool = fantasyRelevant(profile, rates.values());
 
-  // A league's own point values win; fall back to Sleeper's NBA defaults when
+  // A league's own point values win; fall back to the sport's defaults when
   // the league does not publish a usable scoring map.
   const settings = snapshot.scoringSettings;
   const pointsSettings =
-    settings && Object.keys(settings).length > 0 ? settings : DEFAULT_POINTS_SETTINGS;
+    settings && Object.keys(settings).length > 0 ? settings : profile.defaultPointsSettings;
 
+  // Both formats are always computed. Even with the format locked to the
+  // league, the cross-format rank is what makes a recommendation explicable —
+  // "69th here, 5th in points formats, and his FT% is why".
   const ranksByFormat: Record<ScoringFormat, Map<string, number>> = {
     category: new Map(
-      rankPlayers(pool, "category", norms).map((p, i) => [p.playerId, i + 1]),
+      rankPlayers(profile, pool, "category", norms, pointsSettings).map((p, i) => [
+        p.playerId,
+        i + 1,
+      ]),
     ),
     points: new Map(
-      rankPlayers(pool, "points", norms, pointsSettings).map((p, i) => [p.playerId, i + 1]),
+      rankPlayers(profile, pool, "points", norms, pointsSettings).map((p, i) => [
+        p.playerId,
+        i + 1,
+      ]),
     ),
   };
 
   return {
     snapshot,
+    profile,
     players,
     rates,
     norms,
@@ -104,43 +115,44 @@ export async function buildAnalysis(snapshot: LeagueSnapshot): Promise<AnalysisC
  */
 
 function buildTags(
+  ctx: AnalysisContext,
   rates: PlayerRates,
-  z: Record<CategoryKey, number> | null,
+  z: Record<string, number> | null,
   form: FormDelta | null,
   buzz: number,
   player: SleeperPlayer | undefined,
   format: ScoringFormat,
 ): ReasonTag[] {
   const tags: ReasonTag[] = [];
+  const cat = (key: string) => z?.[key] ?? 0;
 
   if (form && form.minutesPct >= 0.15) tags.push({ label: "Minutes Up", tone: "hot" });
   if (form && form.pointsPct >= 0.25) tags.push({ label: "Scoring Surge", tone: "hot" });
   if (buzz >= 200) tags.push({ label: "League-Wide Buzz", tone: "hot" });
 
   if (z) {
-    if (z.stl + z.blk >= 2) tags.push({ label: "Defensive Stats", tone: "good" });
-    if (z.tpm >= 1.2) tags.push({ label: "Three-Point Volume", tone: "good" });
-    if (z.reb >= 1.2) tags.push({ label: "Glass Cleaner", tone: "good" });
-    if (z.ast >= 1.2) tags.push({ label: "Playmaker", tone: "good" });
-    if (z.fgPct >= 1) tags.push({ label: "Efficient Finisher", tone: "good" });
-    if (z.to <= -1.2) tags.push({ label: "Turnover Prone", tone: "warn" });
-    if (z.ftPct <= -1.2) tags.push({ label: "Drags FT%", tone: "warn" });
+    // Category shorthand is basketball-shaped today; guarded by key presence so
+    // a sport without these categories simply produces no tag.
+    if (cat("stl") + cat("blk") >= 2) tags.push({ label: "Defensive Stats", tone: "good" });
+    if (cat("tpm") >= 1.2) tags.push({ label: "Three-Point Volume", tone: "good" });
+    if (cat("reb") >= 1.2) tags.push({ label: "Glass Cleaner", tone: "good" });
+    if (cat("ast") >= 1.2) tags.push({ label: "Playmaker", tone: "good" });
+    if (cat("fgPct") >= 1) tags.push({ label: "Efficient Finisher", tone: "good" });
+    if (cat("to") <= -1.2) tags.push({ label: "Turnover Prone", tone: "warn" });
+    if (cat("ftPct") <= -1.2) tags.push({ label: "Drags FT%", tone: "warn" });
   } else {
-    // Points format: volume is the whole story.
-    if (rates.pts >= 18) tags.push({ label: "Volume Scorer", tone: "good" });
-    if (rates.pts + rates.reb + rates.ast >= 30) {
-      tags.push({ label: "Stat Stuffer", tone: "good" });
-    }
+    const production = ctx.profile.categories
+      .filter((c) => !c.invert && !c.volumeWeighted)
+      .reduce((s, c) => s + rateOf(rates, c.key), 0);
+    if (rateOf(rates, "pts") >= 18) tags.push({ label: "Volume Scorer", tone: "good" });
+    if (production >= 30) tags.push({ label: "Stat Stuffer", tone: "good" });
   }
 
   if (rates.mpg >= 30) tags.push({ label: "Heavy Minutes", tone: "good" });
-  if (player?.injury_status) {
-    tags.push({ label: player.injury_status, tone: "warn" });
-  }
+  if (player?.injury_status) tags.push({ label: player.injury_status, tone: "warn" });
 
-  // Keep cards quiet — the spec explicitly asks for less competing metadata.
-  const limit = format === "category" ? 3 : 2;
-  return tags.slice(0, limit);
+  // Keep cards quiet — the design brief asks for less competing metadata.
+  return tags.slice(0, format === "category" ? 3 : 2);
 }
 
 function toRecommendation(
@@ -151,20 +163,19 @@ function toRecommendation(
   format: ScoringFormat,
 ): Recommendation {
   const player = ctx.players[rates.playerId];
-  const z = format === "category" ? categoryZScores(rates, ctx.norms) : null;
+  const labels = categoryLabels(ctx.profile);
+  const zAll = categoryZScores(ctx.profile, rates, ctx.norms);
+  const z = format === "category" ? zAll : null;
+
   const other: ScoringFormat = format === "category" ? "points" : "category";
   const otherRank = ctx.ranksByFormat[other].get(rates.playerId) ?? null;
-  const thisPoolRank = ctx.ranksByFormat[format].get(rates.playerId) ?? null;
+  const thisRank = ctx.ranksByFormat[format].get(rates.playerId) ?? null;
 
-  const zForDisplay = z ?? categoryZScores(rates, ctx.norms);
-  const ordered = CATEGORY_KEYS.map((key) => ({
-    key,
-    label: CATEGORY_LABELS[key],
-    z: zForDisplay[key],
-  })).sort((a, b) => b.z - a.z);
+  const ordered = ctx.profile.categories
+    .map((c) => ({ key: c.key, label: labels[c.key], z: zAll[c.key] }))
+    .sort((a, b) => b.z - a.z);
 
-  const delta =
-    otherRank !== null && thisPoolRank !== null ? otherRank - thisPoolRank : null;
+  const form = ctx.form.get(rates.playerId) ?? null;
 
   return {
     playerId: rates.playerId,
@@ -176,27 +187,20 @@ function toRecommendation(
     score,
     rank,
     otherFormatRank: otherRank,
-    rankDelta: delta,
+    rankDelta: otherRank !== null && thisRank !== null ? otherRank - thisRank : null,
     rates,
     zScores: z,
     bestCategories: ordered.slice(0, 3),
     worstCategory: ordered[ordered.length - 1] ?? null,
     buzz: ctx.buzz[rates.playerId] ?? 0,
-    form: ctx.form.get(rates.playerId) ?? null,
-    tags: buildTags(
-      rates,
-      z,
-      ctx.form.get(rates.playerId) ?? null,
-      ctx.buzz[rates.playerId] ?? 0,
-      player,
-      format,
-    ),
+    form,
+    tags: buildTags(ctx, rates, z, form, ctx.buzz[rates.playerId] ?? 0, player, format),
   };
 }
 
 /** Players with stats who are not on any roster in this league. */
 function availablePool(ctx: AnalysisContext): PlayerRates[] {
-  return fantasyRelevant(ctx.rates.values()).filter((r) => {
+  return fantasyRelevant(ctx.profile, ctx.rates.values()).filter((r) => {
     if (ctx.rosteredIds.has(r.playerId)) return false;
     const p = ctx.players[r.playerId];
     return Boolean(p && p.active);
@@ -208,8 +212,7 @@ export function getWaiverRecommendations(
   format: ScoringFormat,
   limit = 12,
 ): Recommendation[] {
-  const ranked = rankPlayers(availablePool(ctx), format, ctx.norms, ctx.pointsSettings);
-  return ranked
+  return rankPlayers(ctx.profile, availablePool(ctx), format, ctx.norms, ctx.pointsSettings)
     .slice(0, limit)
     .map((p, i) => toRecommendation(ctx, p.rates, p.score, i + 1, format));
 }
@@ -217,8 +220,8 @@ export function getWaiverRecommendations(
 /**
  * Sleepers: available players who are *rising* rather than merely good.
  *
- * Ranked by a blend of recent-minutes trend, league-wide add velocity, and
- * per-36 production that outstrips their current role — the profile of someone
+ * Ranked on a blend of role trend, league-wide add velocity, and per-36
+ * production that outstrips their current minutes — the profile of someone
  * about to be worth more than their box score says today.
  */
 export function getSleepers(
@@ -227,19 +230,22 @@ export function getSleepers(
   limit = 10,
 ): (Recommendation & { sleeperReason: string })[] {
   const pool = availablePool(ctx);
-  const ranked = rankPlayers(pool, format, ctx.norms, ctx.pointsSettings);
+  const ranked = rankPlayers(ctx.profile, pool, format, ctx.norms, ctx.pointsSettings);
   const rankOf = new Map(ranked.map((p, i) => [p.playerId, i + 1]));
+  const scoreOf = new Map(ranked.map((p) => [p.playerId, p.score]));
 
   const scored = pool.map((rates) => {
     const form = ctx.form.get(rates.playerId) ?? null;
     const buzz = ctx.buzz[rates.playerId] ?? 0;
     const player = ctx.players[rates.playerId];
 
-    // Per-36 production relative to the minutes they actually play: a player
-    // producing at a high per-36 rate in a small role is the classic breakout
-    // shape, and unlike the weekly splits this is computed from full-season
-    // totals, so it is stable rather than sample noise.
-    const per36 = rates.mpg > 0 ? ((rates.pts + rates.reb + rates.ast) / rates.mpg) * 36 : 0;
+    // Per-36 production against the minutes actually played. Computed from
+    // full-season totals, so unlike the weekly splits it is stable rather than
+    // sample noise.
+    const production = ctx.profile.categories
+      .filter((c) => !c.invert && !c.volumeWeighted)
+      .reduce((s, c) => s + rateOf(rates, c.key), 0);
+    const per36 = rates.mpg > 0 ? (production / rates.mpg) * 36 : 0;
     const roleUpside = rates.mpg < 28 ? per36 / 12 : 0;
     const youth = player?.age && player.age <= 24 ? 1 : 0;
 
@@ -259,7 +265,7 @@ export function getSleepers(
     } else if (buzz >= 100) {
       reason = `Added in ${buzz.toLocaleString()} Sleeper leagues this week`;
     } else if (roleUpside > 0 && per36 >= 28) {
-      reason = `${per36.toFixed(0)} PTS+REB+AST per 36 in only ${rates.mpg.toFixed(0)} minutes a night`;
+      reason = `${per36.toFixed(0)} combined per 36 in only ${rates.mpg.toFixed(0)} minutes a night`;
     } else if (youth) {
       reason = `Age ${player?.age} and already producing in a rotation role`;
     } else {
@@ -273,15 +279,14 @@ export function getSleepers(
     .filter((s) => s.rise > 0)
     .sort((a, b) => b.rise - a.rise)
     .slice(0, limit)
-    .map((s, i) => ({
+    .map((s) => ({
       ...toRecommendation(
         ctx,
         s.rates,
-        ranked.find((r) => r.playerId === s.rates.playerId)?.score ?? 0,
-        i + 1,
+        scoreOf.get(s.rates.playerId) ?? 0,
+        rankOf.get(s.rates.playerId) ?? 0,
         format,
       ),
-      rank: rankOf.get(s.rates.playerId) ?? i + 1,
       sleeperReason: s.reason,
     }));
 }
@@ -299,7 +304,7 @@ export function getTeamRoster(
     .map((id) => ctx.rates.get(id))
     .filter((r): r is PlayerRates => Boolean(r));
 
-  return rankPlayers(rates, format, ctx.norms, ctx.pointsSettings).map((p, i) =>
+  return rankPlayers(ctx.profile, rates, format, ctx.norms, ctx.pointsSettings).map((p, i) =>
     toRecommendation(ctx, p.rates, p.score, i + 1, format),
   );
 }

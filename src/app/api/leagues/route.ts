@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { findLeaguesForUsername } from "@/lib/nba/league";
+import { findLeaguesForUsername } from "@/lib/engine/league";
 import { errorResponse } from "@/lib/api-helpers";
 
 export const runtime = "nodejs";
 
-/** Resolve a Sleeper username to the NBA leagues they manage. */
+/** Resolve a Sleeper username to the leagues they manage. */
 export async function POST(request: Request) {
   try {
     const { username } = (await request.json()) as { username?: string };

@@ -30,13 +30,32 @@ export type PlayerCard = {
 
 export type Commentary = { text: string; fallback: boolean } | null;
 
+/** One parsed league rule, as read from Sleeper's undocumented settings blob. */
+export type LeagueSetting = {
+  key: string;
+  label: string;
+  value: string | null;
+  raw: number | string | null;
+  kind: "week" | "count" | "currency" | "enum" | "boolean" | "text";
+  hint?: string;
+};
+
 export type LeagueInfo = {
   leagueId: string;
   name: string;
   season: string;
+  sport: string;
+  sportLabel: string;
   statsSeason: string;
+  currentWeek: number | null;
   teamCount: number;
-  detectedFormat: ScoringFormat;
+  /** The league's scoring format — read from the league, not chosen. */
+  format: ScoringFormat;
+  /** True while the format is still an inference the user has not confirmed. */
+  formatInferred: boolean;
+  /** False for sports with no category scoring concept, e.g. NFL. */
+  supportsCategories: boolean;
+  rosterSize: number | null;
   userTeamId: number | null;
   rosteredCount: number;
   scoredCount: number;
@@ -50,7 +69,12 @@ export type TeamInfo = {
   isUserTeam: boolean;
 };
 
-export type Snapshot = { league: LeagueInfo; teams: TeamInfo[] };
+export type Snapshot = {
+  league: LeagueInfo;
+  settings: LeagueSetting[];
+  rawSettings: Record<string, number | string>;
+  teams: TeamInfo[];
+};
 
 export type BoardResponse = {
   view: "waivers" | "sleepers" | "roster";
@@ -80,20 +104,16 @@ export type Session = {
   leagueId: string;
   userId: string | null;
   league: LeagueInfo;
+  settings: LeagueSetting[];
   teams: TeamInfo[];
+  /**
+   * Set once the user confirms or corrects the format on the setup screen.
+   * Sent back with every request so a correction survives a page reload.
+   */
+  confirmedFormat: ScoringFormat | null;
 };
 
 export const SESSION_KEY = "courtiq.session";
-
-export function loadSession(): Session | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(SESSION_KEY);
-    return raw ? (JSON.parse(raw) as Session) : null;
-  } catch {
-    return null;
-  }
-}
 
 export function saveSession(session: Session) {
   try {
@@ -110,3 +130,8 @@ export function clearSession() {
     /* ignore */
   }
 }
+
+export const FORMAT_LABEL: Record<ScoringFormat, string> = {
+  category: "Categories",
+  points: "Points",
+};

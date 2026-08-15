@@ -11,7 +11,8 @@ const FAIRNESS_COPY: Record<string, { label: string; className: string }> = {
   "you-give-up-value": { label: "You give up a little value", className: "text-orange" },
 };
 
-export function TradePanel({ session, format }: { session: Session; format: ScoringFormat }) {
+export function TradePanel({ session }: { session: Session }) {
+  const format = session.league.format;
   const opponents = session.teams.filter((t) => !t.isUserTeam);
   const [selected, setSelected] = useState<number | null>(opponents[0]?.rosterId ?? null);
 
@@ -46,7 +47,7 @@ export function TradePanel({ session, format }: { session: Session; format: Scor
           body: JSON.stringify({
             leagueId: session.leagueId,
             userId: session.userId,
-            format: fmt,
+            format: session.confirmedFormat,
             view: "roster",
             rosterId,
           }),
@@ -81,7 +82,7 @@ export function TradePanel({ session, format }: { session: Session; format: Scor
           leagueId: session.leagueId,
           userId: session.userId,
           partnerRosterId: selected,
-          format,
+          format: session.confirmedFormat,
         }),
       });
       const data = await res.json();

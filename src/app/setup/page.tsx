@@ -3,7 +3,13 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { saveSession, type Snapshot } from "@/lib/types";
+import {
+  FORMAT_LABEL,
+  saveSession,
+  type LeagueSetting,
+  type ScoringFormat,
+  type Snapshot,
+} from "@/lib/types";
 
 type Mode = "username" | "leagueId";
 type LeagueOption = { leagueId: string; name: string; season: string; teamCount: number };
@@ -20,12 +26,19 @@ export default function Setup() {
   const [leagues, setLeagues] = useState<LeagueOption[] | null>(null);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
 
-  async function loadLeague(leagueId: string, resolvedUserId: string | null) {
-    setStatus("Reading rosters and scoring settings…");
+  // The user's correction to the inferred format, if they made one.
+  const [formatChoice, setFormatChoice] = useState<ScoringFormat | null>(null);
+
+  async function loadLeague(
+    leagueId: string,
+    resolvedUserId: string | null,
+    format: ScoringFormat | null = null,
+  ) {
+    setStatus("Reading rosters, scoring settings, and league rules…");
     const res = await fetch("/api/snapshot", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ leagueId, userId: resolvedUserId }),
+      body: JSON.stringify({ leagueId, userId: resolvedUserId, format }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? "Could not load that league.");
@@ -41,6 +54,7 @@ export default function Setup() {
     setError(null);
     setLeagues(null);
     setSnapshot(null);
+    setFormatChoice(null);
 
     try {
       if (mode === "leagueId") {
@@ -58,7 +72,7 @@ export default function Setup() {
         setUserId(data.user.userId);
         if (!data.leagues.length) {
           throw new Error(
-            `${data.user.displayName} has no NBA leagues on Sleeper for ${data.season}. Try importing by league ID instead.`,
+            `${data.user.displayName} has no leagues on Sleeper for ${data.season}. Try importing by league ID instead.`,
           );
         }
         if (data.leagues.length === 1) {
@@ -89,13 +103,31 @@ export default function Setup() {
     }
   }
 
+  /** Re-score the league under a corrected format before continuing. */
+  async function correctFormat(next: ScoringFormat) {
+    if (!snapshot || busy) return;
+    setFormatChoice(next);
+    setBusy(true);
+    setError(null);
+    try {
+      await loadLeague(snapshot.league.leagueId, userId, next);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong.");
+      setStatus(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function goToDashboard() {
     if (!snapshot) return;
     saveSession({
       leagueId: snapshot.league.leagueId,
       userId,
       league: snapshot.league,
+      settings: snapshot.settings,
       teams: snapshot.teams,
+      confirmedFormat: formatChoice ?? snapshot.league.format,
     });
     router.push("/app");
   }
@@ -116,8 +148,8 @@ export default function Setup() {
           Connect your league
         </h1>
         <p className="mt-3 max-w-lg text-muted">
-          CourtIQ reads your league straight from Sleeper — rosters, scoring settings, and every
-          player still on the wire.
+          CourtIQ reads your league straight from Sleeper — rosters, scoring settings, and the
+          rules that decide what a good move actually is.
         </p>
 
         <form onSubmit={handleSubmit} className="mt-10">
@@ -212,51 +244,147 @@ export default function Setup() {
         )}
 
         {snapshot && (
-          <section className="mt-10 rounded-xl border border-edge bg-panel p-7">
-            <div className="flex items-center gap-2 text-sm text-green">
-              <span className="h-1.5 w-1.5 rounded-full bg-green" />
-              League imported
-            </div>
-
-            <h2 className="mt-3 font-display text-3xl font-bold uppercase tracking-tight">
-              {snapshot.league.name}
-            </h2>
-
-            <dl className="mt-7 grid grid-cols-2 gap-x-6 gap-y-6 sm:grid-cols-4">
-              {[
-                { label: "Teams", value: String(snapshot.league.teamCount) },
-                {
-                  label: "Format detected",
-                  value: snapshot.league.detectedFormat === "category" ? "9-CAT" : "Points",
-                },
-                { label: "Rostered players", value: String(snapshot.league.rosteredCount) },
-                { label: "With scoreable stats", value: String(snapshot.league.scoredCount) },
-              ].map((s) => (
-                <div key={s.label}>
-                  <dt className="text-xs uppercase tracking-[0.12em] text-muted">{s.label}</dt>
-                  <dd className="nums mt-1.5 font-display text-2xl font-semibold text-teal">
-                    {s.value}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-
-            <p className="mt-7 text-sm leading-relaxed text-muted">
-              Scoring against the {snapshot.league.statsSeason} season
-              {snapshot.league.statsSeason !== snapshot.league.season && " (the last one played)"}.
-              {snapshot.league.userTeamId === null &&
-                " We could not tell which team is yours — import by username to unlock trade suggestions."}
-            </p>
-
-            <button
-              onClick={goToDashboard}
-              className="mt-7 w-full rounded-lg bg-orange px-7 py-4 font-display text-lg font-semibold uppercase tracking-wide text-[#1a0d06] transition hover:brightness-110 sm:w-auto"
-            >
-              Continue to dashboard →
-            </button>
-          </section>
+          <ConfirmLeague
+            snapshot={snapshot}
+            busy={busy}
+            onCorrectFormat={correctFormat}
+            onContinue={goToDashboard}
+          />
         )}
       </div>
     </main>
+  );
+}
+
+/**
+ * Confirm-and-correct.
+ *
+ * Everything here was read from the league rather than chosen by the user, so
+ * the screen asks "does this look right?" instead of offering settings. The
+ * format is the one field with a correction control, because Sleeper publishes
+ * no category-vs-points flag and our read of it is an inference.
+ */
+function ConfirmLeague({
+  snapshot,
+  busy,
+  onCorrectFormat,
+  onContinue,
+}: {
+  snapshot: Snapshot;
+  busy: boolean;
+  onCorrectFormat: (f: ScoringFormat) => void;
+  onContinue: () => void;
+}) {
+  const { league, settings } = snapshot;
+
+  return (
+    <section className="mt-10 rounded-xl border border-edge bg-panel p-7">
+      <div className="flex items-center gap-2 text-sm text-green">
+        <span className="h-1.5 w-1.5 rounded-full bg-green" />
+        League imported
+      </div>
+
+      <h2 className="mt-3 font-display text-3xl font-bold uppercase tracking-tight">
+        {league.name}
+      </h2>
+      <p className="mt-1.5 text-sm text-muted">
+        {league.sportLabel} · {league.teamCount} teams · scoring against the {league.statsSeason}{" "}
+        season
+        {league.statsSeason !== league.season && " (the last one played)"}
+      </p>
+
+      {/* Format gets its own block: it is the one value we infer. */}
+      <div className="mt-7 rounded-lg border border-edge bg-card p-5">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.12em] text-muted">Scoring format</p>
+            <p className="mt-1 font-display text-2xl font-semibold text-teal">
+              {FORMAT_LABEL[league.format]}
+            </p>
+          </div>
+
+          {league.supportsCategories ? (
+            <div className="text-right">
+              <p className="text-xs text-muted">Not right?</p>
+              <button
+                onClick={() =>
+                  onCorrectFormat(league.format === "category" ? "points" : "category")
+                }
+                disabled={busy}
+                className="mt-1.5 rounded-md border border-edge px-3 py-1.5 text-sm text-ink transition hover:border-teal/60 disabled:opacity-40"
+              >
+                Switch to {FORMAT_LABEL[league.format === "category" ? "points" : "category"]}
+              </button>
+            </div>
+          ) : (
+            <p className="max-w-[16rem] text-right text-xs text-muted">
+              {league.sportLabel} leagues are points-only.
+            </p>
+          )}
+        </div>
+
+        {league.formatInferred && league.supportsCategories && (
+          <p className="mt-4 border-t border-edge pt-4 text-xs leading-relaxed text-muted">
+            Sleeper does not publish a category-vs-points flag, so we read this from your
+            league&apos;s per-stat scoring values. Worth a glance before you continue — every
+            ranking depends on it.
+          </p>
+        )}
+      </div>
+
+      <dl className="mt-7 grid grid-cols-2 gap-x-6 gap-y-6 sm:grid-cols-4">
+        {[
+          { label: "Teams", value: String(league.teamCount) },
+          {
+            label: "Starting slots",
+            value: league.rosterSize ? String(league.rosterSize) : "—",
+          },
+          { label: "Rostered players", value: String(league.rosteredCount) },
+          { label: "With scoreable stats", value: String(league.scoredCount) },
+        ].map((s) => (
+          <div key={s.label}>
+            <dt className="text-xs uppercase tracking-[0.12em] text-muted">{s.label}</dt>
+            <dd className="nums mt-1.5 font-display text-2xl font-semibold text-teal">
+              {s.value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+
+      {settings.length > 0 && (
+        <div className="mt-8 border-t border-edge pt-7">
+          <h3 className="font-display text-sm font-semibold uppercase tracking-[0.12em] text-muted">
+            League rules we picked up
+          </h3>
+          <p className="mt-1.5 text-xs text-muted">
+            These shape the advice — a pickup before the trade deadline is a different call than
+            one after it.
+          </p>
+          <dl className="mt-5 grid gap-x-6 gap-y-4 sm:grid-cols-2">
+            {settings.map((s: LeagueSetting) => (
+              <div key={s.key} className="flex items-baseline justify-between gap-4">
+                <dt className="text-sm text-muted">{s.label}</dt>
+                <dd className="nums text-sm font-medium">{s.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
+
+      {league.userTeamId === null && (
+        <p className="mt-7 rounded-lg border border-edge bg-card px-5 py-4 text-sm text-muted">
+          We could not tell which team is yours — import by username instead of league ID to
+          unlock My Team and trade suggestions.
+        </p>
+      )}
+
+      <button
+        onClick={onContinue}
+        disabled={busy}
+        className="mt-7 w-full rounded-lg bg-orange px-7 py-4 font-display text-lg font-semibold uppercase tracking-wide text-[#1a0d06] transition hover:brightness-110 disabled:opacity-40 sm:w-auto"
+      >
+        Looks right — continue →
+      </button>
+    </section>
   );
 }

@@ -2,18 +2,19 @@ import {
   getLeague,
   getLeagueUsers,
   getLeaguesForUser,
-  getNBAState,
   getRosters,
+  getSportState,
   getUser,
   SleeperError,
 } from "@/lib/sleeper/client";
 import type { SleeperLeague } from "@/lib/sleeper/types";
+import { DEFAULT_SPORT, getProfile, supportedSportLabels, type SportProfile } from "@/lib/sports";
 import { detectFormat, type ScoringFormat } from "./scoring";
+import { parseLeagueRules, type LeagueRules } from "./settings";
 
 export type LeagueTeam = {
   rosterId: number;
   ownerId: string | null;
-  /** Manager's chosen team name, falling back to their display name. */
   teamName: string;
   ownerName: string;
   playerIds: string[];
@@ -24,34 +25,42 @@ export type LeagueSnapshot = {
   leagueId: string;
   name: string;
   season: string;
+  sport: string;
   teamCount: number;
-  detectedFormat: ScoringFormat;
+  /** Format actually in force — the user's confirmed choice, or the inference. */
+  format: ScoringFormat;
+  rules: LeagueRules;
   scoringSettings: Record<string, number> | null;
   rosterPositions: string[] | null;
   teams: LeagueTeam[];
-  /** Every player ID rostered anywhere in the league. */
   rosteredIds: string[];
   userTeamId: number | null;
-  /** Season whose stats we score against (may lag the league season in the offseason). */
+  /** Season whose stats we score against (may lag in the offseason). */
   statsSeason: string;
+  /** Week of the live season, when one is underway. */
+  currentWeek: number | null;
 };
 
 /**
  * Which season's stats to score against.
  *
- * During the offseason Sleeper's current season has no games played yet, so we
- * fall back to the previous completed season. Without this the entire app
- * renders empty between April and October.
+ * During the offseason the current season has no games played, so we fall back
+ * to the previous completed one. Without this the whole app renders empty
+ * between seasons.
  */
-export async function resolveStatsSeason(leagueSeason: string): Promise<string> {
+async function resolveSeasonContext(
+  sport: string,
+  leagueSeason: string,
+): Promise<{ statsSeason: string; currentWeek: number | null }> {
   try {
-    const state = await getNBAState();
-    if (state.season === leagueSeason && state.season_type === "off") {
-      return state.previous_season;
-    }
-    return leagueSeason;
+    const state = await getSportState(sport);
+    const offseason = state.season === leagueSeason && state.season_type === "off";
+    return {
+      statsSeason: offseason ? state.previous_season : leagueSeason,
+      currentWeek: offseason ? null : (state.display_week ?? null),
+    };
   } catch {
-    return leagueSeason;
+    return { statsSeason: leagueSeason, currentWeek: null };
   }
 }
 
@@ -67,19 +76,29 @@ function teamNameFor(
   };
 }
 
-export async function buildSnapshot(
-  leagueId: string,
-  userId: string | null,
-): Promise<LeagueSnapshot> {
-  const league = await getLeague(leagueId);
-  if (!league) throw new SleeperError(`No Sleeper league found with ID ${leagueId}`, 404);
-  if (league.sport && league.sport !== "nba") {
+/** Resolve the profile for a league, refusing sports we cannot score yet. */
+export function profileForLeague(league: SleeperLeague): SportProfile {
+  const sport = league.sport || DEFAULT_SPORT;
+  const profile = getProfile(sport);
+  if (!profile) {
     throw new SleeperError(
-      `That league is ${league.sport.toUpperCase()}, not NBA. CourtIQ is basketball-only.`,
+      `CourtIQ does not cover ${sport.toUpperCase()} yet — currently ${supportedSportLabels()}.`,
       400,
     );
   }
+  return profile;
+}
 
+export async function buildSnapshot(
+  leagueId: string,
+  userId: string | null,
+  /** Set when the user has corrected the inferred format on the setup screen. */
+  formatOverride?: ScoringFormat | null,
+): Promise<LeagueSnapshot> {
+  const league = await getLeague(leagueId);
+  if (!league) throw new SleeperError(`No Sleeper league found with ID ${leagueId}`, 404);
+
+  const profile = profileForLeague(league);
   const [rosters, users] = await Promise.all([getRosters(leagueId), getLeagueUsers(leagueId)]);
 
   const teams: LeagueTeam[] = rosters.map((r) => {
@@ -94,30 +113,41 @@ export async function buildSnapshot(
     };
   });
 
+  const inferred = detectFormat(profile, league.scoring_settings);
+  const format = formatOverride ?? inferred;
+  const rules = parseLeagueRules(league, format, formatOverride == null);
+
   const rosteredIds = [...new Set(teams.flatMap((t) => t.playerIds))];
   const userTeam = teams.find((t) => t.isUserTeam) ?? null;
+  const { statsSeason, currentWeek } = await resolveSeasonContext(profile.id, league.season);
 
   return {
     leagueId,
     name: league.name,
     season: league.season,
+    sport: profile.id,
     teamCount: league.total_rosters ?? teams.length,
-    detectedFormat: detectFormat(league.scoring_settings),
+    format,
+    rules,
     scoringSettings: league.scoring_settings,
     rosterPositions: league.roster_positions,
     teams,
     rosteredIds,
     userTeamId: userTeam?.rosterId ?? null,
-    statsSeason: await resolveStatsSeason(league.season),
+    statsSeason,
+    currentWeek,
   };
 }
 
 /**
- * Resolve a username to their NBA leagues, checking the current season first
- * and falling back to the previous one — in the offseason a manager's leagues
- * often still live under last season until they roll over.
+ * Resolve a username to their leagues, checking the current season first and
+ * falling back to the previous one — between seasons a manager's leagues often
+ * still live under last year until they roll over.
  */
-export async function findLeaguesForUsername(username: string): Promise<{
+export async function findLeaguesForUsername(
+  username: string,
+  sport: string = DEFAULT_SPORT,
+): Promise<{
   user: { userId: string; displayName: string };
   leagues: SleeperLeague[];
   season: string;
@@ -127,13 +157,13 @@ export async function findLeaguesForUsername(username: string): Promise<{
     throw new SleeperError(`No Sleeper user named "${username}". Check the spelling.`, 404);
   }
 
-  const state = await getNBAState().catch(() => null);
+  const state = await getSportState(sport).catch(() => null);
   const seasons = state
     ? [...new Set([state.season, state.previous_season])]
     : [String(new Date().getFullYear())];
 
   for (const season of seasons) {
-    const leagues = await getLeaguesForUser(user.user_id, season);
+    const leagues = await getLeaguesForUser(sport, user.user_id, season);
     if (leagues.length > 0) {
       return {
         user: { userId: user.user_id, displayName: user.display_name },

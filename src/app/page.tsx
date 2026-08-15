@@ -26,7 +26,7 @@ export default function Landing() {
             COURT<span className="text-orange">IQ</span>
           </span>
           <span className="hidden text-xs uppercase tracking-[0.2em] text-muted sm:block">
-            NBA Fantasy Intelligence
+            Fantasy League Intelligence
           </span>
         </header>
 
@@ -44,8 +44,8 @@ export default function Landing() {
 
           <p className="mt-8 max-w-xl text-lg leading-relaxed text-muted">
             Most fantasy advice ignores how your league actually scores. CourtIQ reads your
-            Sleeper roster settings and re-ranks every waiver pickup, sleeper, and trade for
-            9-category or points — then tells you why, out loud.
+            Sleeper league — scoring format, playoff dates, trade deadline, waiver rules — and
+            ranks every pickup, sleeper, and trade against them. Then it tells you why, out loud.
           </p>
 
           <div className="mt-12 flex flex-wrap items-center gap-5">
@@ -66,7 +66,7 @@ export default function Landing() {
           {[
             {
               title: "Format-aware scoring",
-              body: "Z-scores across nine categories, or your league's own per-stat point values.",
+              body: "Category z-scores or your league's own per-stat point values — read from the league, never guessed at.",
             },
             {
               title: "Rule-based trades",
@@ -74,7 +74,7 @@ export default function Landing() {
             },
             {
               title: "An analyst with opinions",
-              body: "Every call comes with a read on why it matters, not a stat table.",
+              body: "Every call comes with a read on why it matters right now, not a stat table.",
             },
           ].map((f) => (
             <div key={f.title} className="bg-panel px-6 py-7">

@@ -7,15 +7,32 @@ import Anthropic from "@anthropic-ai/sdk";
  * The model narrates; it never ranks. Every number in the prompt comes from
  * the deterministic scoring engine, and the model is told not to invent more —
  * a made-up stat on stage is worse than a boring sentence.
+ *
+ * The sport noun is injected so the persona is not hard-coded to basketball.
  */
-const SYSTEM_PROMPT = `You are CourtIQ, a confident fantasy basketball analyst with hype-man energy — the voice of someone who called this pick two weeks ago and is enjoying being right.
+function systemPrompt(sportNoun: string): string {
+  return `You are CourtIQ, a confident fantasy ${sportNoun} analyst with hype-man energy — the voice of someone who called this pick two weeks ago and is enjoying being right.
 
 Rules:
 - 1-3 punchy sentences. No preamble, no "Here's why" — open on the take.
-- You are given the numbers. Use them, and never invent a stat, injury, trade, or storyline you were not given.
+- You are given the numbers and the league's rules. Use them, and never invent a stat, date, injury, trade, or storyline you were not given.
+- League context is there to sharpen the call — a pickup right before the trade deadline is a different argument than one in week 3. Reference it only when it genuinely changes the advice.
 - Confident and playful about the *pick*, never disrespectful toward the real athlete. Tease the roster move, not the person.
 - Never hedge with "might", "could be worth a look", or "if he stays healthy". Make the call.
 - Plain text only. No markdown, no emoji, no bullet points.`;
+}
+
+/** League rules rendered as prompt lines, plus the sport's noun. */
+export type LeagueContext = {
+  sportNoun: string;
+  /** Pre-formatted fact lines from the league's own settings. */
+  rules: string[];
+};
+
+function renderContext(ctx: LeagueContext): string {
+  if (!ctx.rules.length) return "";
+  return `League rules:\n${ctx.rules.map((r) => `- ${r}`).join("\n")}\n\n`;
+}
 
 const MODEL = "claude-opus-5";
 
@@ -43,7 +60,12 @@ function getClient(): Anthropic | null {
 const cache = new Map<string, string>();
 const MAX_CACHE = 200;
 
-async function generate(cacheKey: string, prompt: string, fallback: string): Promise<PersonaResult> {
+async function generate(
+  cacheKey: string,
+  league: LeagueContext,
+  prompt: string,
+  fallback: string,
+): Promise<PersonaResult> {
   const hit = cache.get(cacheKey);
   if (hit) return { text: hit, fallback: false };
 
@@ -54,14 +76,14 @@ async function generate(cacheKey: string, prompt: string, fallback: string): Pro
     const message = await anthropic.beta.messages.create({
       model: MODEL,
       max_tokens: 2048,
-      system: SYSTEM_PROMPT,
+      system: systemPrompt(league.sportNoun),
       // Short narration task — low effort keeps the demo snappy. Thinking stays
       // on (the Opus 5 default) rather than disabled, which can leak internal
       // tags into visible text.
       output_config: { effort: "low" },
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
-      messages: [{ role: "user", content: prompt }],
+      messages: [{ role: "user", content: renderContext(league) + prompt }],
     });
 
     if (message.stop_reason === "refusal") return { text: fallback, fallback: true };
@@ -100,10 +122,12 @@ export type WaiverBrief = {
   tags: string[];
 };
 
-export async function waiverCommentary(brief: WaiverBrief): Promise<PersonaResult> {
-  const formatName = brief.format === "category" ? "9-category" : "points";
+export async function waiverCommentary(
+  brief: WaiverBrief,
+  league: LeagueContext,
+): Promise<PersonaResult> {
+  const formatName = brief.format === "category" ? "category" : "points";
   const lines = [
-    `Format: ${formatName} league.`,
     `Top available pickup: ${brief.name}, ${brief.position}, ${brief.team}.`,
     `Per game: ${brief.statLine}.`,
     `Biggest strengths vs the league's player pool: ${brief.strengths}.`,
@@ -123,7 +147,12 @@ export async function waiverCommentary(brief: WaiverBrief): Promise<PersonaResul
     `${brief.name} is the best name sitting on your waiver wire and it is not close. ` +
     `${brief.statLine} with ${brief.strengths} — in a ${formatName} league that is a starter, not a stash.`;
 
-  return generate(`waiver:${brief.format}:${brief.name}:${brief.rank}`, lines.join("\n"), fallback);
+  return generate(
+    `waiver:${brief.format}:${brief.name}:${brief.rank}`,
+    league,
+    lines.join("\n"),
+    fallback,
+  );
 }
 
 export type SleeperBrief = {
@@ -135,9 +164,11 @@ export type SleeperBrief = {
   format: "category" | "points";
 };
 
-export async function sleeperCommentary(brief: SleeperBrief): Promise<PersonaResult> {
+export async function sleeperCommentary(
+  brief: SleeperBrief,
+  league: LeagueContext,
+): Promise<PersonaResult> {
   const prompt = [
-    `Format: ${brief.format === "category" ? "9-category" : "points"} league.`,
     `Breakout candidate: ${brief.name}, ${brief.position}, ${brief.team}.`,
     `Why he is trending up: ${brief.reason}.`,
     `Per game: ${brief.statLine}.`,
@@ -148,7 +179,7 @@ export async function sleeperCommentary(brief: SleeperBrief): Promise<PersonaRes
     `${brief.name} is the one nobody in your league has looked at yet. ${brief.reason}. ` +
     `Add him now and let everyone else figure it out next week.`;
 
-  return generate(`sleeper:${brief.format}:${brief.name}`, prompt, fallback);
+  return generate(`sleeper:${brief.format}:${brief.name}`, league, prompt, fallback);
 }
 
 export type TradeBrief = {
@@ -165,7 +196,10 @@ export type TradeBrief = {
   fairness: "even" | "you-give-up-value" | "you-gain-value";
 };
 
-export async function tradeCommentary(brief: TradeBrief): Promise<PersonaResult> {
+export async function tradeCommentary(
+  brief: TradeBrief,
+  league: LeagueContext,
+): Promise<PersonaResult> {
   const fairnessNote = {
     even: "The two players grade out close to even on value.",
     "you-gain-value": "This slightly favors the manager you are advising.",
@@ -173,7 +207,6 @@ export async function tradeCommentary(brief: TradeBrief): Promise<PersonaResult>
   }[brief.fairness];
 
   const prompt = [
-    `Format: ${brief.format === "category" ? "9-category" : "points"} league.`,
     `Trade partner: ${brief.partnerTeamName}.`,
     `The manager sends: ${brief.giveName}, ${brief.givePosition} — ${brief.giveStats}.`,
     `The manager receives: ${brief.receiveName}, ${brief.receivePosition} — ${brief.receiveStats}.`,
@@ -188,6 +221,7 @@ export async function tradeCommentary(brief: TradeBrief): Promise<PersonaResult>
 
   return generate(
     `trade:${brief.format}:${brief.giveName}:${brief.receiveName}`,
+    league,
     prompt,
     fallback,
   );

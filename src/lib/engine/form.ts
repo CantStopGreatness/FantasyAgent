@@ -55,12 +55,12 @@ function tally(files: StatsBySeason[]): Map<string, Tally> {
  * per-file average. Returns an empty map if the weekly endpoint is unavailable
  * — form is an enhancement and must never take down a recommendation request.
  */
-export async function getRecentForm(season: string): Promise<Map<string, FormDelta>> {
+export async function getRecentForm(sport: string, season: string): Promise<Map<string, FormDelta>> {
   const weeks = Array.from({ length: LAST_WEEK }, (_, i) => i + 1);
 
   let files: StatsBySeason[];
   try {
-    files = await Promise.all(weeks.map((w) => getWeekStats(season, w)));
+    files = await Promise.all(weeks.map((w) => getWeekStats(sport, season, w)));
   } catch {
     return new Map();
   }

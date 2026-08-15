@@ -7,8 +7,9 @@ import { LeagueBadge } from "@/components/LeagueBadge";
 import { PersonaCallout } from "@/components/PersonaCallout";
 import { HeroCard, PlayerList } from "@/components/PlayerCards";
 import { TradePanel } from "@/components/TradePanel";
+import type { Overrides } from "@/components/LeagueRulesEditor";
 import { useSession } from "@/lib/useSession";
-import { clearSession, type BoardResponse, type Session } from "@/lib/types";
+import { clearSession, saveSession, type BoardResponse, type Session } from "@/lib/types";
 
 type Tab = "waivers" | "sleepers" | "team" | "trades";
 
@@ -44,6 +45,54 @@ export default function Dashboard() {
     if (checkedStorage && !session) router.replace("/setup");
   }, [checkedStorage, session, router]);
 
+  /**
+   * Apply a settings correction made from the top bar.
+   *
+   * Scoring edits change the rankings, so the cached boards are dropped and
+   * the league is re-read rather than the display simply being relabelled.
+   */
+  const applyOverrides = useCallback(
+    async (next: Overrides) => {
+      if (!session) return;
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch("/api/snapshot", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            leagueId: session.leagueId,
+            userId: session.userId,
+            format: next.format,
+            ruleOverrides: next.rules,
+            scoringOverrides: next.scoring,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Could not apply those settings.");
+
+        cache.current.clear();
+        saveSession({
+          ...session,
+          league: data.league,
+          settings: data.settings,
+          scoring: data.scoring,
+          confirmedFormat: next.format ?? data.league.format,
+          ruleOverrides: next.rules,
+          scoringOverrides: next.scoring,
+        });
+        // useSession reads localStorage through an external store, which the
+        // storage event only fires for *other* tabs — nudge this one.
+        window.dispatchEvent(new StorageEvent("storage", { key: "courtiq.session" }));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Something went wrong.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [session],
+  );
+
   const fetchBoard = useCallback(
     async (view: "waivers" | "sleepers" | "roster") => {
       if (!session) return;
@@ -64,6 +113,8 @@ export default function Dashboard() {
             leagueId: session.leagueId,
             userId: session.userId,
             format: session.confirmedFormat,
+            ruleOverrides: session.ruleOverrides,
+            scoringOverrides: session.scoringOverrides,
             view,
             rosterId: view === "roster" ? session.league.userTeamId : undefined,
           }),
@@ -115,7 +166,7 @@ export default function Dashboard() {
             </p>
           </div>
 
-          <LeagueBadge league={league} settings={session.settings} />
+          <LeagueBadge session={session} busy={loading} onOverrides={applyOverrides} />
 
           <button
             onClick={() => {

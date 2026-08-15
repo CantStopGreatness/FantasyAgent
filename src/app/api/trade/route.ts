@@ -4,7 +4,7 @@ import { groupLabel, suggestTrade } from "@/lib/engine/trade";
 import { statLine, toCard } from "@/lib/engine/serialize";
 import { rulesForPrompt } from "@/lib/engine/settings";
 import { tradeCommentary } from "@/lib/ai/persona";
-import { errorResponse, parseFormatOverride } from "@/lib/api-helpers";
+import { errorResponse, parseOverrides } from "@/lib/api-helpers";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -23,6 +23,8 @@ export async function POST(request: Request) {
       userId?: string | null;
       partnerRosterId?: number;
       format?: string | null;
+      ruleOverrides?: Record<string, number | string>;
+      scoringOverrides?: Record<string, number>;
     };
 
     if (!body.leagueId?.trim() || body.partnerRosterId === undefined) {
@@ -32,7 +34,7 @@ export async function POST(request: Request) {
     const ctx = await getAnalysis(
       body.leagueId.trim(),
       body.userId?.trim() || null,
-      parseFormatOverride(body.format),
+      parseOverrides(body),
     );
     const format = ctx.snapshot.format;
     const result = suggestTrade(ctx, body.partnerRosterId, format);

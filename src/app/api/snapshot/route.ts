@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAnalysis } from "@/lib/engine/context-cache";
-import { significantSettings } from "@/lib/engine/settings";
-import { errorResponse, parseFormatOverride } from "@/lib/api-helpers";
+import { errorResponse, parseOverrides } from "@/lib/api-helpers";
 
 export const runtime = "nodejs";
 
@@ -14,20 +13,19 @@ export const runtime = "nodejs";
  */
 export async function POST(request: Request) {
   try {
-    const { leagueId, userId, format } = (await request.json()) as {
+    const body = (await request.json()) as {
       leagueId?: string;
       userId?: string | null;
       format?: string | null;
+      ruleOverrides?: Record<string, number | string>;
+      scoringOverrides?: Record<string, number>;
     };
+    const { leagueId, userId } = body;
     if (!leagueId?.trim()) {
       return NextResponse.json({ error: "Enter a league ID." }, { status: 400 });
     }
 
-    const ctx = await getAnalysis(
-      leagueId.trim(),
-      userId?.trim() || null,
-      parseFormatOverride(format),
-    );
+    const ctx = await getAnalysis(leagueId.trim(), userId?.trim() || null, parseOverrides(body));
     const { snapshot } = ctx;
 
     // How many rostered players we could actually score — an honest signal
@@ -52,7 +50,8 @@ export async function POST(request: Request) {
         rosteredCount: snapshot.rosteredIds.length,
         scoredCount,
       },
-      settings: significantSettings(snapshot.rules),
+      settings: snapshot.rules.settings,
+      scoring: snapshot.rules.scoring,
       // Every key Sleeper actually sent. Undocumented object, so keep the
       // unfiltered copy available for reconciling the label table.
       rawSettings: snapshot.rules.raw,

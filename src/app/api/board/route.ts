@@ -4,7 +4,7 @@ import { getSleepers, getTeamRoster, getWaiverRecommendations } from "@/lib/engi
 import { strengthsPhrase, statLine, toCard, weaknessPhrase } from "@/lib/engine/serialize";
 import { rulesForPrompt } from "@/lib/engine/settings";
 import { sleeperCommentary, waiverCommentary, type LeagueContext } from "@/lib/ai/persona";
-import { errorResponse, parseFormatOverride } from "@/lib/api-helpers";
+import { errorResponse, parseOverrides } from "@/lib/api-helpers";
 import type { AnalysisContext } from "@/lib/engine/recommend";
 
 export const runtime = "nodejs";
@@ -15,6 +15,8 @@ type Body = {
   leagueId?: string;
   userId?: string | null;
   format?: string | null;
+  ruleOverrides?: Record<string, number | string>;
+  scoringOverrides?: Record<string, number>;
   view?: "waivers" | "sleepers" | "roster";
   rosterId?: number;
 };
@@ -43,7 +45,7 @@ export async function POST(request: Request) {
     const ctx = await getAnalysis(
       body.leagueId.trim(),
       body.userId?.trim() || null,
-      parseFormatOverride(body.format),
+      parseOverrides(body),
     );
     const format = ctx.snapshot.format;
     const view = body.view ?? "waivers";

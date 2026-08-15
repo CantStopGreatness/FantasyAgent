@@ -4,12 +4,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
-  FORMAT_LABEL,
-  saveSession,
-  type LeagueSetting,
-  type ScoringFormat,
-  type Snapshot,
-} from "@/lib/types";
+  EMPTY_OVERRIDES,
+  LeagueRulesEditor,
+  type Overrides,
+} from "@/components/LeagueRulesEditor";
+import { FORMAT_LABEL, saveSession, type Snapshot } from "@/lib/types";
 
 type Mode = "username" | "leagueId";
 type LeagueOption = { leagueId: string; name: string; season: string; teamCount: number };
@@ -26,19 +25,25 @@ export default function Setup() {
   const [leagues, setLeagues] = useState<LeagueOption[] | null>(null);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
 
-  // The user's correction to the inferred format, if they made one.
-  const [formatChoice, setFormatChoice] = useState<ScoringFormat | null>(null);
+  // Every correction the user makes on the confirm screen.
+  const [overrides, setOverrides] = useState<Overrides>(EMPTY_OVERRIDES);
 
   async function loadLeague(
     leagueId: string,
     resolvedUserId: string | null,
-    format: ScoringFormat | null = null,
+    o: Overrides = EMPTY_OVERRIDES,
   ) {
     setStatus("Reading rosters, scoring settings, and league rules…");
     const res = await fetch("/api/snapshot", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ leagueId, userId: resolvedUserId, format }),
+      body: JSON.stringify({
+        leagueId,
+        userId: resolvedUserId,
+        format: o.format,
+        ruleOverrides: o.rules,
+        scoringOverrides: o.scoring,
+      }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? "Could not load that league.");
@@ -54,7 +59,7 @@ export default function Setup() {
     setError(null);
     setLeagues(null);
     setSnapshot(null);
-    setFormatChoice(null);
+    setOverrides(EMPTY_OVERRIDES);
 
     try {
       if (mode === "leagueId") {
@@ -103,10 +108,15 @@ export default function Setup() {
     }
   }
 
-  /** Re-score the league under a corrected format before continuing. */
-  async function correctFormat(next: ScoringFormat) {
+  /**
+   * Re-read the league under the user's corrections.
+   *
+   * Scoring edits change the rankings, so this round-trips rather than just
+   * updating the display.
+   */
+  async function applyOverrides(next: Overrides) {
+    setOverrides(next);
     if (!snapshot || busy) return;
-    setFormatChoice(next);
     setBusy(true);
     setError(null);
     try {
@@ -126,8 +136,11 @@ export default function Setup() {
       userId,
       league: snapshot.league,
       settings: snapshot.settings,
+      scoring: snapshot.scoring,
       teams: snapshot.teams,
-      confirmedFormat: formatChoice ?? snapshot.league.format,
+      confirmedFormat: overrides.format ?? snapshot.league.format,
+      ruleOverrides: overrides.rules,
+      scoringOverrides: overrides.scoring,
     });
     router.push("/app");
   }
@@ -247,7 +260,8 @@ export default function Setup() {
           <ConfirmLeague
             snapshot={snapshot}
             busy={busy}
-            onCorrectFormat={correctFormat}
+            overrides={overrides}
+            onOverrides={applyOverrides}
             onContinue={goToDashboard}
           />
         )}
@@ -259,23 +273,31 @@ export default function Setup() {
 /**
  * Confirm-and-correct.
  *
- * Everything here was read from the league rather than chosen by the user, so
- * the screen asks "does this look right?" instead of offering settings. The
- * format is the one field with a correction control, because Sleeper publishes
- * no category-vs-points flag and our read of it is an inference.
+ * Everything on this screen was read from the league rather than chosen, so it
+ * asks "does this look right?" The headline numbers stay visible; the full
+ * editable rule and scoring lists sit behind a disclosure, which keeps the
+ * screen calm when you are importing one of several leagues.
  */
 function ConfirmLeague({
   snapshot,
   busy,
-  onCorrectFormat,
+  overrides,
+  onOverrides,
   onContinue,
 }: {
   snapshot: Snapshot;
   busy: boolean;
-  onCorrectFormat: (f: ScoringFormat) => void;
+  overrides: Overrides;
+  onOverrides: (next: Overrides) => void;
   onContinue: () => void;
 }) {
-  const { league, settings } = snapshot;
+  const [open, setOpen] = useState(false);
+  const { league, settings, scoring } = snapshot;
+  const setCount = settings.filter((s) => s.value !== null).length;
+  const editCount =
+    (overrides.format ? 1 : 0) +
+    Object.keys(overrides.rules).length +
+    Object.keys(overrides.scoring).length;
 
   return (
     <section className="mt-10 rounded-xl border border-edge bg-panel p-7">
@@ -293,48 +315,9 @@ function ConfirmLeague({
         {league.statsSeason !== league.season && " (the last one played)"}
       </p>
 
-      {/* Format gets its own block: it is the one value we infer. */}
-      <div className="mt-7 rounded-lg border border-edge bg-card p-5">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="text-xs uppercase tracking-[0.12em] text-muted">Scoring format</p>
-            <p className="mt-1 font-display text-2xl font-semibold text-teal">
-              {FORMAT_LABEL[league.format]}
-            </p>
-          </div>
-
-          {league.supportsCategories ? (
-            <div className="text-right">
-              <p className="text-xs text-muted">Not right?</p>
-              <button
-                onClick={() =>
-                  onCorrectFormat(league.format === "category" ? "points" : "category")
-                }
-                disabled={busy}
-                className="mt-1.5 rounded-md border border-edge px-3 py-1.5 text-sm text-ink transition hover:border-teal/60 disabled:opacity-40"
-              >
-                Switch to {FORMAT_LABEL[league.format === "category" ? "points" : "category"]}
-              </button>
-            </div>
-          ) : (
-            <p className="max-w-[16rem] text-right text-xs text-muted">
-              {league.sportLabel} leagues are points-only.
-            </p>
-          )}
-        </div>
-
-        {league.formatInferred && league.supportsCategories && (
-          <p className="mt-4 border-t border-edge pt-4 text-xs leading-relaxed text-muted">
-            Sleeper does not publish a category-vs-points flag, so we read this from your
-            league&apos;s per-stat scoring values. Worth a glance before you continue — every
-            ranking depends on it.
-          </p>
-        )}
-      </div>
-
       <dl className="mt-7 grid grid-cols-2 gap-x-6 gap-y-6 sm:grid-cols-4">
         {[
-          { label: "Teams", value: String(league.teamCount) },
+          { label: "Format", value: FORMAT_LABEL[league.format] },
           {
             label: "Starting slots",
             value: league.rosterSize ? String(league.rosterSize) : "—",
@@ -351,25 +334,49 @@ function ConfirmLeague({
         ))}
       </dl>
 
-      {settings.length > 0 && (
-        <div className="mt-8 border-t border-edge pt-7">
-          <h3 className="font-display text-sm font-semibold uppercase tracking-[0.12em] text-muted">
-            League rules we picked up
-          </h3>
-          <p className="mt-1.5 text-xs text-muted">
-            These shape the advice — a pickup before the trade deadline is a different call than
-            one after it.
-          </p>
-          <dl className="mt-5 grid gap-x-6 gap-y-4 sm:grid-cols-2">
-            {settings.map((s: LeagueSetting) => (
-              <div key={s.key} className="flex items-baseline justify-between gap-4">
-                <dt className="text-sm text-muted">{s.label}</dt>
-                <dd className="nums text-sm font-medium">{s.value}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      )}
+      {/* Everything editable lives behind one disclosure so importing a league
+          does not open onto a wall of form fields. */}
+      <div className="mt-7 border-t border-edge pt-6">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="flex w-full items-center justify-between gap-4 text-left"
+        >
+          <span>
+            <span className="font-display text-sm font-semibold uppercase tracking-[0.12em]">
+              League rules &amp; scoring
+            </span>
+            <span className="mt-1 block text-xs text-muted">
+              {setCount} rule{setCount === 1 ? "" : "s"} and {scoring.length} scoring value
+              {scoring.length === 1 ? "" : "s"} read from Sleeper
+              {editCount > 0 && ` · ${editCount} edited`}
+            </span>
+          </span>
+          <span className="shrink-0 whitespace-nowrap text-xs text-muted">
+            {open ? "Hide" : "Review & edit"}{" "}
+            <span aria-hidden className={open ? "inline-block rotate-180" : "inline-block"}>
+              ▾
+            </span>
+          </span>
+        </button>
+
+        {open && (
+          <div className="mt-6">
+            <LeagueRulesEditor
+              format={league.format}
+              formatInferred={league.formatInferred}
+              supportsCategories={league.supportsCategories}
+              settings={settings}
+              scoring={scoring}
+              overrides={overrides}
+              busy={busy}
+              onChange={onOverrides}
+              onReset={() => onOverrides(EMPTY_OVERRIDES)}
+            />
+          </div>
+        )}
+      </div>
 
       {league.userTeamId === null && (
         <p className="mt-7 rounded-lg border border-edge bg-card px-5 py-4 text-sm text-muted">

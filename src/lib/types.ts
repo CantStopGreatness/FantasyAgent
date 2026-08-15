@@ -38,6 +38,16 @@ export type LeagueSetting = {
   raw: number | string | null;
   kind: "week" | "count" | "currency" | "enum" | "boolean" | "text";
   hint?: string;
+  options?: { value: number; label: string }[];
+  edited?: boolean;
+};
+
+/** One per-stat point value. In a points league these are the ranking. */
+export type ScoringStat = {
+  key: string;
+  label: string;
+  value: number;
+  edited?: boolean;
 };
 
 export type LeagueInfo = {
@@ -72,6 +82,7 @@ export type TeamInfo = {
 export type Snapshot = {
   league: LeagueInfo;
   settings: LeagueSetting[];
+  scoring: ScoringStat[];
   rawSettings: Record<string, number | string>;
   teams: TeamInfo[];
 };
@@ -105,12 +116,16 @@ export type Session = {
   userId: string | null;
   league: LeagueInfo;
   settings: LeagueSetting[];
+  scoring: ScoringStat[];
   teams: TeamInfo[];
   /**
-   * Set once the user confirms or corrects the format on the setup screen.
-   * Sent back with every request so a correction survives a page reload.
+   * Corrections the user made on the settings screen. Sent with every request
+   * so they survive a reload — and because scoring edits change the rankings,
+   * they must be applied server-side rather than only in the UI.
    */
   confirmedFormat: ScoringFormat | null;
+  ruleOverrides: Record<string, number | string>;
+  scoringOverrides: Record<string, number>;
 };
 
 export const SESSION_KEY = "courtiq.session";

@@ -48,6 +48,8 @@ export function TradePanel({ session }: { session: Session }) {
             leagueId: session.leagueId,
             userId: session.userId,
             format: session.confirmedFormat,
+            ruleOverrides: session.ruleOverrides,
+            scoringOverrides: session.scoringOverrides,
             view: "roster",
             rosterId,
           }),
@@ -83,6 +85,8 @@ export function TradePanel({ session }: { session: Session }) {
           userId: session.userId,
           partnerRosterId: selected,
           format: session.confirmedFormat,
+          ruleOverrides: session.ruleOverrides,
+          scoringOverrides: session.scoringOverrides,
         }),
       });
       const data = await res.json();

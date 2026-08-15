@@ -10,7 +10,20 @@ import {
 import type { SleeperLeague } from "@/lib/sleeper/types";
 import { DEFAULT_SPORT, getProfile, supportedSportLabels, type SportProfile } from "@/lib/sports";
 import { detectFormat, type ScoringFormat } from "./scoring";
-import { parseLeagueRules, type LeagueRules } from "./settings";
+import { parseLeagueRules, type LeagueRules, type RuleOverrides } from "./settings";
+
+/**
+ * Corrections the user made on the settings screen.
+ *
+ * `rules` only reach the analyst's context. `scoring` and `format` reach the
+ * engine and change the rankings, which is why they arrive here rather than
+ * being applied client-side.
+ */
+export type LeagueOverrides = {
+  format?: ScoringFormat | null;
+  rules?: RuleOverrides;
+  scoring?: Record<string, number>;
+};
 
 export type LeagueTeam = {
   rosterId: number;
@@ -92,8 +105,7 @@ export function profileForLeague(league: SleeperLeague): SportProfile {
 export async function buildSnapshot(
   leagueId: string,
   userId: string | null,
-  /** Set when the user has corrected the inferred format on the setup screen. */
-  formatOverride?: ScoringFormat | null,
+  overrides: LeagueOverrides = {},
 ): Promise<LeagueSnapshot> {
   const league = await getLeague(leagueId);
   if (!league) throw new SleeperError(`No Sleeper league found with ID ${leagueId}`, 404);
@@ -113,9 +125,22 @@ export async function buildSnapshot(
     };
   });
 
-  const inferred = detectFormat(profile, league.scoring_settings);
-  const format = formatOverride ?? inferred;
-  const rules = parseLeagueRules(league, format, formatOverride == null);
+  // Scoring corrections are merged before anything reads the weights, so both
+  // the format inference and the points math see the user's version.
+  const scoringOverrides = overrides.scoring ?? {};
+  const scoringSettings = Object.keys(scoringOverrides).length
+    ? { ...(league.scoring_settings ?? {}), ...scoringOverrides }
+    : league.scoring_settings;
+
+  const inferred = detectFormat(profile, scoringSettings);
+  const format = overrides.format ?? inferred;
+  const rules = parseLeagueRules(
+    league,
+    format,
+    overrides.format == null,
+    overrides.rules ?? {},
+    scoringOverrides,
+  );
 
   const rosteredIds = [...new Set(teams.flatMap((t) => t.playerIds))];
   const userTeam = teams.find((t) => t.isUserTeam) ?? null;
@@ -129,7 +154,7 @@ export async function buildSnapshot(
     teamCount: league.total_rosters ?? teams.length,
     format,
     rules,
-    scoringSettings: league.scoring_settings,
+    scoringSettings,
     rosterPositions: league.roster_positions,
     teams,
     rosteredIds,

@@ -78,6 +78,7 @@ async function main() {
       formatInferred: false,
       rosterSize: 10,
       settings: [],
+      scoring: [],
       raw: {},
     },
     scoringSettings: null,

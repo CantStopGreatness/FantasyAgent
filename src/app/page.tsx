@@ -44,7 +44,7 @@ export default function Landing() {
 
           <p className="mt-8 max-w-xl text-lg leading-relaxed text-muted">
             Most fantasy advice ignores how your league actually scores. CourtIQ reads your
-            Sleeper league — scoring format, playoff dates, trade deadline, waiver rules — and
+            Sleeper league, scoring format, playoff dates, trade deadline, waiver rules, and
             ranks every pickup, sleeper, and trade against them. Then it tells you why, out loud.
           </p>
 
@@ -66,7 +66,7 @@ export default function Landing() {
           {[
             {
               title: "Format-aware scoring",
-              body: "Category z-scores or your league's own per-stat point values — read from the league, never guessed at.",
+              body: "Category z-scores or your league's own per-stat point values, read from the league, never guessed at.",
             },
             {
               title: "Rule-based trades",

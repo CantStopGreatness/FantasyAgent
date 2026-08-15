@@ -17,9 +17,15 @@ export function TradePanel({ session, format }: { session: Session; format: Scor
 
   const [roster, setRoster] = useState<BoardResponse | null>(null);
   const [rosterLoading, setRosterLoading] = useState(false);
-  const [trade, setTrade] = useState<TradeResponse | null>(null);
   const [tradeLoading, setTradeLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // A suggestion is only valid for the team and format it was built for.
+  // Tagging it with that key retires it automatically when either changes,
+  // rather than clearing it from an effect.
+  const [suggestion, setSuggestion] = useState<{ key: string; data: TradeResponse } | null>(null);
+  const tradeKey = `${selected}:${format}`;
+  const trade = suggestion?.key === tradeKey ? suggestion.data : null;
 
   const rosterCache = useRef(new Map<string, BoardResponse>());
 
@@ -59,9 +65,7 @@ export function TradePanel({ session, format }: { session: Session; format: Scor
     [session],
   );
 
-  // Selecting a team or flipping format invalidates any suggestion on screen.
   useEffect(() => {
-    setTrade(null);
     if (selected !== null) void loadRoster(selected, format);
   }, [selected, format, loadRoster]);
 
@@ -82,7 +86,7 @@ export function TradePanel({ session, format }: { session: Session; format: Scor
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Could not build a trade.");
-      setTrade(data as TradeResponse);
+      setSuggestion({ key: tradeKey, data: data as TradeResponse });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {

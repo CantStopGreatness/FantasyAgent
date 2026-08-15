@@ -7,9 +7,9 @@ import { FormatToggle } from "@/components/FormatToggle";
 import { PersonaCallout } from "@/components/PersonaCallout";
 import { HeroCard, PlayerList } from "@/components/PlayerCards";
 import { TradePanel } from "@/components/TradePanel";
+import { useSession } from "@/lib/useSession";
 import {
   clearSession,
-  loadSession,
   type BoardResponse,
   type ScoringFormat,
   type Session,
@@ -26,9 +26,14 @@ const TABS: { id: Tab; label: string }[] = [
 
 export default function Dashboard() {
   const router = useRouter();
-  const [session, setSession] = useState<Session | null>(null);
-  const [format, setFormat] = useState<ScoringFormat>("category");
+  const session = useSession();
   const [tab, setTab] = useState<Tab>("waivers");
+
+  // The league's detected format is the starting position; the toggle takes
+  // over once the user touches it. Deriving rather than syncing keeps the
+  // session load from having to write into state.
+  const [chosenFormat, setChosenFormat] = useState<ScoringFormat | null>(null);
+  const format: ScoringFormat = chosenFormat ?? session?.league.detectedFormat ?? "category";
 
   const [board, setBoard] = useState<BoardResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -38,15 +43,19 @@ export default function Dashboard() {
   // toggle back and forth is instant rather than a fresh round trip.
   const cache = useRef(new Map<string, BoardResponse>());
 
+  // A visitor who lands here without an imported league belongs on /setup.
+  // useSession reports null on the first hydration pass too, so wait a tick
+  // before deciding the session is genuinely absent.
+  const [checkedStorage, setCheckedStorage] = useState(false);
   useEffect(() => {
-    const s = loadSession();
-    if (!s) {
-      router.replace("/setup");
-      return;
-    }
-    setSession(s);
-    setFormat(s.league.detectedFormat);
-  }, [router]);
+    if (session) return;
+    const id = setTimeout(() => setCheckedStorage(true), 0);
+    return () => clearTimeout(id);
+  }, [session]);
+
+  useEffect(() => {
+    if (checkedStorage && !session) router.replace("/setup");
+  }, [checkedStorage, session, router]);
 
   const fetchBoard = useCallback(
     async (view: "waivers" | "sleepers" | "roster", fmt: ScoringFormat) => {
@@ -121,7 +130,7 @@ export default function Dashboard() {
             </p>
           </div>
 
-          <FormatToggle value={format} onChange={setFormat} disabled={loading} />
+          <FormatToggle value={format} onChange={setChosenFormat} disabled={loading} />
 
           <button
             onClick={() => {

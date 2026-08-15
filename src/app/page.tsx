@@ -48,6 +48,22 @@ export default function Landing() {
             ranks every pickup, sleeper, and trade against them. Then it tells you why, out loud.
           </p>
 
+          {/* Sample analyst callout */}
+          <div className="mt-10 max-w-xl rounded-xl border border-edge bg-panel px-6 py-5">
+            <p className="mb-3 text-xs uppercase tracking-[0.15em] text-muted">
+              Sample insight
+            </p>
+            <p className="text-base leading-relaxed text-ink">
+              <span className="font-semibold text-orange">Anthony Davis</span> is your
+              highest-value pickup this week. Your league rewards blocks heavily and your two
+              weakest categories right now are points and rebounds. He covers both, and he has
+              four home games this week.
+            </p>
+            <p className="mt-4 text-xs text-muted">
+              CourtIQ reads this from your actual league rules, not a generic ranking.
+            </p>
+          </div>
+
           <div className="mt-12 flex flex-wrap items-center gap-5">
             <Link
               href="/setup"

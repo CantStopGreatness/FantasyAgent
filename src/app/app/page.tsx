@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { LeagueBadge } from "@/components/LeagueBadge";
 import { PersonaCallout } from "@/components/PersonaCallout";
 import { HeroCard, PlayerList } from "@/components/PlayerCards";
@@ -25,12 +25,17 @@ export default function Dashboard() {
   const session = useSession();
   const [tab, setTab] = useState<Tab>("waivers");
 
-  const [board, setBoard] = useState<BoardResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Boards are a pure function of the view, so hold them across tab switches.
-  const cache = useRef(new Map<string, BoardResponse>());
+  // Boards are a pure function of the view, so hold them all and derive the
+  // visible one. Keeping them in state rather than a ref lets the fetch effect
+  // bail out when the data is already here, instead of re-pushing it into
+  // state on every tab switch.
+  const [boards, setBoards] = useState<Record<string, BoardResponse>>({});
+  const activeView: "waivers" | "sleepers" | "roster" =
+    tab === "team" ? "roster" : tab === "sleepers" ? "sleepers" : "waivers";
+  const board = boards[activeView] ?? null;
 
   // A visitor without an imported league belongs on /setup. useSession reports
   // null on the first hydration pass too, so wait a tick before deciding.
@@ -72,7 +77,8 @@ export default function Dashboard() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Could not apply those settings.");
 
-        cache.current.clear();
+        // A scoring correction re-scores everything, so every held board is stale.
+        setBoards({});
         saveSession({
           ...session,
           league: data.league,
@@ -98,7 +104,7 @@ export default function Dashboard() {
     async (view: "waivers" | "sleepers" | "roster") => {
       if (!session) return;
 
-      // Demo mode — return pre-built data without hitting Sleeper.
+      // Demo mode — pre-built data, no Sleeper call.
       if (session.leagueId === "demo") {
         const { DEMO_BOARD_WAIVERS, DEMO_BOARD_SLEEPERS, DEMO_BOARD_ROSTER } =
           await import("@/lib/demo");
@@ -108,15 +114,7 @@ export default function Dashboard() {
             : view === "sleepers"
               ? DEMO_BOARD_SLEEPERS
               : DEMO_BOARD_ROSTER;
-        setBoard(demoData);
-        setError(null);
-        setLoading(false);
-        return;
-      }
-
-      const cached = cache.current.get(view);
-      if (cached) {
-        setBoard(cached);
+        setBoards((b) => ({ ...b, [view]: demoData }));
         setError(null);
         return;
       }
@@ -139,11 +137,9 @@ export default function Dashboard() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Could not load recommendations.");
-        cache.current.set(view, data);
-        setBoard(data);
+        setBoards((b) => ({ ...b, [view]: data }));
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong.");
-        setBoard(null);
       } finally {
         setLoading(false);
       }
@@ -153,8 +149,14 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!session || tab === "trades") return;
-    void fetchBoard(tab === "team" ? "roster" : tab);
-  }, [session, tab, fetchBoard]);
+    // Already loaded — nothing to do, and nothing to write into state.
+    if (boards[activeView]) return;
+    // The only synchronous state write left inside fetchBoard is the loading
+    // flag that marks the request starting, which is the intended pattern for
+    // fetching in an effect. Results land after an await.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchBoard(activeView);
+  }, [session, tab, activeView, boards, fetchBoard]);
 
   if (!session) {
     return (

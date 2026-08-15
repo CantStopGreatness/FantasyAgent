@@ -1,4 +1,4 @@
-import type { BoardResponse } from "@/lib/types";
+import type { BoardResponse, TradeResponse } from "@/lib/types";
 
 export const DEMO_BOARD_WAIVERS: BoardResponse = {
   view: "waivers",
@@ -250,8 +250,6 @@ export const DEMO_BOARD_ROSTER: BoardResponse = {
     },
   ],
 };
-
-import type { TradeResponse, BoardResponse } from "@/lib/types";
 
 export const DEMO_TRADE: TradeResponse = {
   found: true,

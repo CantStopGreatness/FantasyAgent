@@ -54,6 +54,7 @@ export default function Dashboard() {
   const applyOverrides = useCallback(
     async (next: Overrides) => {
       if (!session) return;
+      if (session.leagueId === "demo") return;
       setLoading(true);
       setError(null);
       try {
@@ -96,6 +97,23 @@ export default function Dashboard() {
   const fetchBoard = useCallback(
     async (view: "waivers" | "sleepers" | "roster") => {
       if (!session) return;
+
+      // Demo mode — return pre-built data without hitting Sleeper.
+      if (session.leagueId === "demo") {
+        const { DEMO_BOARD_WAIVERS, DEMO_BOARD_SLEEPERS, DEMO_BOARD_ROSTER } =
+          await import("@/lib/demo");
+        const demoData =
+          view === "waivers"
+            ? DEMO_BOARD_WAIVERS
+            : view === "sleepers"
+              ? DEMO_BOARD_SLEEPERS
+              : DEMO_BOARD_ROSTER;
+        setBoard(demoData);
+        setError(null);
+        setLoading(false);
+        return;
+      }
+
       const cached = cache.current.get(view);
       if (cached) {
         setBoard(cached);

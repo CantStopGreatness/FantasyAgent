@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/Icon";
 import { SportsReel } from "@/components/PixelScenes";
+import { ProofDeck } from "@/components/ProofDeck";
 import { DEMO_SESSION } from "@/lib/demo-session";
 import { saveSession } from "@/lib/types";
 
@@ -43,20 +44,32 @@ export default function Landing() {
         <div className="mt-12 grid items-start gap-8 lg:mt-16 lg:grid-cols-[1.05fr_1fr] lg:gap-12">
           <div className="on-field">
             <h1 className="font-display text-[clamp(2.8rem,8vw,5.5rem)] leading-[0.88] text-chalk">
-              YOUR LEAGUE
-              <br />
-              DOESN&apos;T PLAY BY
-              <br />
-              <span className="text-gold">GENERIC RULES.</span>
+              {/* One TypeLine per *visual* line. A line that wraps would be
+                  clipped as one box, revealing both of its rows at once —
+                  which is not typing. Seven characters is the widest that
+                  still fits this column at the clamp's ceiling, so these never
+                  wrap and the effect holds at every width. */}
+              <TypeLine text="YOUR" start={0.1} />
+              <TypeLine text="LEAGUE" start={0.32} />
+              <TypeLine text="DOESN'T" start={0.63} />
+              <TypeLine text="PLAY BY" start={0.98} />
+              <TypeLine text="GENERIC" start={1.33} className="text-gold" />
+              <TypeLine text="RULES." start={1.68} className="text-gold" caret />
             </h1>
 
-            <p className="mt-7 max-w-[36ch] text-lg leading-relaxed text-bone">
+            <p
+              className="after-type mt-7 max-w-[36ch] text-lg leading-relaxed text-bone"
+              style={{ animationDelay: "2.08s" }}
+            >
               CourtIQ reads your Sleeper league, its scoring format, playoff week, trade
               deadline and waiver rules, then ranks every pickup, sleeper and trade against
               them. And tells you why.
             </p>
 
-            <div className="mt-9 flex flex-wrap items-center gap-4">
+            <div
+              className="after-type mt-9 flex flex-wrap items-center gap-4"
+              style={{ animationDelay: "2.28s" }}
+            >
               <Link
                 href="/setup"
                 className="group inline-flex items-center gap-2.5 border-[3px] border-ink bg-flag px-7 py-4 font-display text-lg text-ink transition hover:bg-gold"
@@ -72,7 +85,7 @@ export default function Landing() {
           </div>
 
           <div>
-            <StatSheet />
+            <ProofDeck />
             {/* Three sports in one panel: fills the column's tail with the
                 product's own subject, and states the sport-agnostic claim
                 visually before the roadmap has to. */}
@@ -91,41 +104,41 @@ export default function Landing() {
 }
 
 /**
- * A real ranked row and the reason behind it.
+ * One line of the headline, typed in.
  *
- * These numbers are this engine's actual output for the 2025 season, which is
- * why the page can afford to lead with them instead of a claim.
+ * The full text is in the DOM from the first paint — the reveal is a clip, not
+ * a per-character mount — so the line is readable to a screen reader, copyable,
+ * selectable, and never reflows as it lands. Duration and step count come from
+ * the line's own length so every line types at the same speed rather than the
+ * same duration, and the caller stages the starts so one line finishes before
+ * the next begins.
  */
-function StatSheet() {
+function TypeLine({
+  text,
+  start,
+  className = "",
+  caret = false,
+}: {
+  text: string;
+  /** Seconds from load. */
+  start: number;
+  className?: string;
+  caret?: boolean;
+}) {
+  const steps = text.length + (caret ? 1 : 0);
+
   return (
-    <div className="card deal">
-      <div className="strip flex items-baseline justify-between px-5 py-3">
-        <span className="font-display text-sm">SAME PLAYER · TWO RULEBOOKS</span>
-        <span className="nums text-xs text-bone-3">2025</span>
-      </div>
-
-      <div className="border-b-[3px] border-ink bg-bone-2 px-5 py-5">
-        <p className="font-display text-2xl leading-none">GIANNIS ANTETOKOUNMPO</p>
-        <p className="nums mt-2 text-sm text-ink-2">PF · MIL · 30.4 PTS · 11.9 REB · 6.5 AST</p>
-      </div>
-
-      <dl className="grid grid-cols-2 divide-x-[3px] divide-ink border-b-[3px] border-ink">
-        <div className="px-5 py-5">
-          <dt className="text-xs text-ink-2">Category league</dt>
-          <dd className="nums font-display text-5xl leading-none">69th</dd>
-        </div>
-        <div className="bg-gold px-5 py-5">
-          <dt className="text-xs text-ink">Points league</dt>
-          <dd className="nums font-display text-5xl leading-none">5th</dd>
-        </div>
-      </dl>
-
-      <p className="px-5 py-4 text-sm leading-relaxed text-ink-2">
-        Same season, same stat line. His free throws carry a{" "}
-        <span className="font-display text-ink">−5.6</span> z-score at high volume, so category
-        leagues punish exactly what points leagues pay for. CourtIQ knows which one you are in.
-      </p>
-    </div>
+    <span
+      className={`type-line ${className}`}
+      style={{
+        animationDuration: `${steps * 45}ms`,
+        animationTimingFunction: `steps(${steps})`,
+        animationDelay: `${start}s`,
+      }}
+    >
+      {text}
+      {caret && <i className="caret" />}
+    </span>
   );
 }
 

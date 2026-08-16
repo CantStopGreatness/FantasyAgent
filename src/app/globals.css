@@ -220,30 +220,30 @@ body {
 }
 
 /* A shot: up off the hand, over the top, and down THROUGH the rim.
-   The rim sits at right-4 (16px) and is 78px wide, so its centre is about
-   55px from the right edge of a 104px-tall lane; the ball is 34px, and these
-   values put its centre on that point at 58%, which is the frame the net
-   strip snaps taut on. */
+   The rim's centre is 52px in from the lane's right edge and its underside is
+   at 72px (see HoopLane). The ball is 44px, so a left offset of 100% - 74px
+   puts its centre on that line; 50/68/100 walk its top from the rim, into the
+   net, and out the bottom. 56% is the frame the net strip snaps taut on. */
 @keyframes shot-arc {
   0% {
     transform: translate(6px, 64px);
     opacity: 0;
   }
   8%,
-  72% {
+  74% {
     opacity: 1;
   }
   32% {
-    transform: translate(calc(45% - 22px), 2px);
+    transform: translate(calc(45% - 22px), 0px);
   }
   56% {
-    transform: translate(calc(100% - 96px), 52px);
+    transform: translate(calc(100% - 74px), 50px);
   }
   68% {
-    transform: translate(calc(100% - 94px), 84px);
+    transform: translate(calc(100% - 74px), 68px);
   }
-  78% {
-    transform: translate(calc(100% - 94px), 120px);
+  80% {
+    transform: translate(calc(100% - 74px), 100px);
     opacity: 0;
   }
   100% {
@@ -347,4 +347,118 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+
+/* ── The load sequence ────────────────────────────────────────────────────
+ * The headline types itself in, line by line, the way an arcade attract
+ * screen does. clip-path rather than width because the text keeps its final
+ * layout the whole time: nothing reflows as characters land, and the reveal
+ * needs no measurement. steps() is what makes it read as typing rather than
+ * as a wipe. Duration and step count are set per line from its length.
+ */
+@keyframes type-in {
+  to {
+    clip-path: inset(0 -0.12em 0 0);
+  }
+}
+
+/* fit-content matters: clip-path percentages resolve against the element's own
+   box, so a full-width block would reveal across the column rather than across
+   the words — a short line would finish typing early and then sit through dead
+   time while its animation ran out. Shrinking each line to its text makes the
+   reveal rate the typing rate. */
+.type-line {
+  display: block;
+  width: fit-content;
+  clip-path: inset(0 100% 0 0);
+  animation-name: type-in;
+  animation-fill-mode: both;
+}
+
+/* A block caret, typed last, then left blinking. */
+@keyframes caret-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.caret {
+  display: inline-block;
+  /* Wide enough to read as a block cursor. A narrow bar at display size
+     just looks like a stray capital I on the end of the word. */
+  width: 0.5em;
+  height: 0.72em;
+  margin-left: 0.1em;
+  background: currentColor;
+  vertical-align: baseline;
+  animation: caret-blink 1s steps(1, end) infinite;
+}
+
+/* Everything under the headline arrives after the typing lands. Its own
+   keyframes rather than `deal`, which starts at 0.4 opacity — held through a
+   near-three-second delay that reads as a rendering fault, not a wait. */
+@keyframes rise {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.after-type {
+  animation: rise 460ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Slides stack in one grid cell, so the inactive ones must keep their space —
+   visibility rather than display, or the panel would collapse to the height of
+   whichever card is showing and shunt the page on every turn. */
+.proof-slide {
+  visibility: hidden;
+  opacity: 0;
+}
+
+/* The incoming card wipes in on steps, the same mechanical reveal as the
+   headline. Because the animation only applies while the slide is active, it
+   restarts on its own each time the deck turns — no key churn, no timers. */
+@keyframes wipe-in {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+.proof-slide[data-active="true"] {
+  visibility: visible;
+  opacity: 1;
+  animation: wipe-in 300ms steps(9) both;
+}
+
+/* Reduced motion needs the delays gone too, not just the durations. The block
+   above only zeroes duration, so a staged sequence would still hold the
+   headline and everything under it blank for three seconds — the wait is the
+   part that hurts here. Scoped to the load sequence so the sprite loops keep
+   their own timing. */
+@media (prefers-reduced-motion: reduce) {
+  .type-line,
+  .after-type {
+    animation-delay: 0s !important;
+  }
+
+  /* A caret with nothing left to type is decoration; blinking it at a 0.01ms
+     duration would be strobe. */
+  .caret {
+    animation: none !important;
+  }
+}
+
 

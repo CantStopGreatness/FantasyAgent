@@ -166,18 +166,30 @@ function basketball(): Bitmap {
 
 export const BALL: Bitmap = basketball();
 
-/** Backboard and rim only — the net is animated separately. */
+/**
+ * Backboard and rim, 15×8 — the net is animated separately.
+ *
+ * Seen from the side, so the rim projects clear of the board rather than
+ * starting halfway across it: cols 0-7 are the board, cols 8-14 are the rim,
+ * and they meet at exactly one column. That separation is what gives the ball
+ * somewhere to fall through.
+ *
+ * The target box is small and sits low, directly above the rim, where a real
+ * one does. Centring it makes the board read as concentric rings — a bullseye,
+ * or a window — because at eight rows the board's own border is already a
+ * rectangle and a second centred rectangle just nests inside it.
+ */
 export const HOOP: Bitmap = {
   palette: { w: CHALK, k: INK, r: FLAG },
   rows: [
-    "kkkkkkkkk....",
-    "kwwwwwwwk....",
-    "kwwkkkwwk....",
-    "kwwk.kwwk....",
-    "kwwkkkwwk....",
-    "kwwwwwwwk....",
-    "kkkkkkkkk....",
-    "....rrrrrrrrr",
+    "kkkkkkkk.......",
+    "kwwwwwwk.......",
+    "kwwwwwwk.......",
+    "kwwkkkwk.......",
+    "kwwkwkwk.......",
+    "kwwkkkwk.......",
+    "kwwwwwwk.......",
+    "kkkkkkkkrrrrrrr",
   ],
 };
 

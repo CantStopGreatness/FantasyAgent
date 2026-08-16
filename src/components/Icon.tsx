@@ -14,6 +14,9 @@ type IconProps = {
 
 export type IconName =
   | "arrow-right"
+  | "arrow-left"
+  | "pause"
+  | "play"
   | "chevron-down"
   | "swap"
   | "up"
@@ -25,6 +28,10 @@ export type IconName =
 
 const PATHS: Record<IconName, React.ReactNode> = {
   "arrow-right": <path d="M2 6.5h7V3l5 5-5 5V9.5H2z" />,
+  "arrow-left": <path d="M14 6.5H7V3L2 8l5 5V9.5h7z" />,
+  // Transport controls, cut square to match the panel ruling.
+  pause: <path d="M3.5 3h3.5v10H3.5zM9 3h3.5v10H9z" />,
+  play: <path d="M4 2.5 13.5 8 4 13.5z" />,
   "chevron-down": <path d="M2.5 5h11L8 11.5z" />,
   // Two staggered arrows: the trade motion, both directions at once.
   swap: (

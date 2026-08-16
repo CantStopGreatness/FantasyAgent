@@ -90,12 +90,17 @@ const LANE = "lane relative h-[120px] overflow-hidden";
 function HoopLane() {
   return (
     <div className={LANE}>
-      <PixelSprite bitmap={HOOP} className="absolute right-6 top-4 h-[68px] w-[110px]" />
-      {/* Net hangs from the rim and goes taut on the pass-through frame. */}
+      {/* Sized so one sprite pixel is exactly 8px (15 cols → 120px), which
+          makes the rest of the lane arithmetic exact rather than approximate.
+          The sprite sits 24px in from the right, so the rim — cols 8-14 of
+          row 7 — spans 80px to 24px in from that edge: centre 52px in,
+          underside at 8 + 7×8 = 72px. The net and the ball are both aimed at
+          that centre, and the net starts at that underside. */}
+      <PixelSprite bitmap={HOOP} className="absolute right-6 top-2 h-[64px] w-[120px]" />
       <PixelAnim
         frames={NET_FRAMES}
         duration="3.6s"
-        className="absolute right-[26px] top-[66px] w-[70px]"
+        className="absolute right-[25px] top-[72px] w-[54px]"
       />
       <Mover className="ball-shot">
         <PixelSprite bitmap={BALL} className="absolute left-0 top-0 h-[44px] w-[44px]" />

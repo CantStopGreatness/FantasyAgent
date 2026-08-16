@@ -226,11 +226,18 @@ export type TradeBrief = {
   receiveName: string;
   receivePosition: string;
   receiveStats: string;
-  userNeed: string;
-  partnerNeed: string;
+  /** Null when the deal came from a stated goal rather than a positional read. */
+  userNeed: string | null;
+  partnerNeed: string | null;
   partnerTeamName: string;
   format: "category" | "points";
-  fairness: "even" | "you-give-up-value" | "you-gain-value";
+  fairness: "even" | "you-give-up-value" | "you-gain-value" | "worth-the-overpay";
+  /** The engine's one-line explanation of why this pair was picked. */
+  rationale?: string;
+  /** Movement in the categories the manager asked to improve. */
+  goalDelta?: { key: string; label: string; delta: number }[];
+  /** True when the manager named the player they wanted. */
+  targeted?: boolean;
 };
 
 export async function tradeCommentary(
@@ -241,25 +248,58 @@ export async function tradeCommentary(
     even: "The two players grade out close to even on value.",
     "you-gain-value": "This slightly favors the manager you are advising.",
     "you-give-up-value": "This gives up a little value, but it fixes a real hole.",
+    "worth-the-overpay":
+      "This costs a little value on paper, and it is worth it for what the manager asked for.",
   }[brief.fairness];
 
-  const prompt = [
+  const rationale = brief.rationale?.trim() || null;
+  const goalDelta = brief.goalDelta ?? [];
+  const targeted = brief.targeted ?? false;
+  const lines = [
     `Trade partner: ${brief.partnerTeamName}.`,
-    `The manager sends: ${brief.giveName}, ${brief.givePosition} - ${brief.giveStats}.`,
-    `The manager receives: ${brief.receiveName}, ${brief.receivePosition} - ${brief.receiveStats}.`,
-    `Reason this works: the manager is thin at ${brief.userNeed} and deep at ${brief.partnerNeed}; ${brief.partnerTeamName} is the mirror image.`,
-    fairnessNote,
-    `Pitch this trade.`,
-  ].join("\n");
+    `The manager sends: ${brief.giveName}, ${brief.givePosition} — ${brief.giveStats}.`,
+    `The manager receives: ${brief.receiveName}, ${brief.receivePosition} — ${brief.receiveStats}.`,
+  ];
+
+  if (rationale) lines.push(`Why this pair: ${rationale}`);
+  if (targeted) {
+    lines.push(
+      `The manager specifically asked for ${brief.receiveName}, so this is about landing him at a price that works.`,
+    );
+  }
+  if (goalDelta.length) {
+    const moves = goalDelta
+      .map((g) => `${g.label} ${g.delta >= 0 ? "+" : ""}${g.delta.toFixed(1)} z`)
+      .join(", ");
+    lines.push(`The manager asked to improve: ${moves}. Lead with whether that actually lands.`);
+  }
+  if (brief.userNeed && brief.partnerNeed) {
+    lines.push(
+      `Positional read: the manager is thin at ${brief.userNeed}; ${brief.partnerTeamName} is thin at ${brief.partnerNeed}.`,
+    );
+  }
+  lines.push(fairnessNote, `Pitch this trade.`);
+
+  const goalPhrase = goalDelta.length
+    ? `It improves ${goalDelta.map((g) => g.label).join(" and ")} by the deterministic category comparison`
+    : targeted
+      ? `This is the closest deterministic value match for ${brief.receiveName}`
+    : brief.userNeed && brief.partnerNeed
+      ? `This addresses your need at ${brief.userNeed} and ${brief.partnerTeamName}'s need at ${brief.partnerNeed}`
+      : `This is the closest deterministic value match on the board`;
 
   const fallback =
-    `This is a one-for-one candidate from the position-group comparison: you send ${brief.giveName} from ${brief.partnerNeed} and receive ${brief.receiveName} at ${brief.userNeed}. ` +
-    `${brief.partnerTeamName} has the complementary group pattern used by the deterministic trade rule.`;
+    `${goalPhrase}. Send ${brief.giveName} and receive ${brief.receiveName}. ${fairnessNote}`;
 
+  // The conditions are part of the identity of the pitch — the same swap
+  // argued for rebounds should not reuse a line written without a goal.
   return generateNarration(
-    { type: "trade", brief },
+    {
+      type: "trade",
+      brief: { ...brief, rationale, goalDelta, targeted },
+    },
     league,
-    prompt,
+    lines.join("\n"),
     fallback,
   );
 }

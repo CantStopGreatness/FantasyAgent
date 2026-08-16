@@ -125,3 +125,31 @@ export function pointScoringRate(
   }
   return value;
 }
+
+/**
+ * Preserve every numeric stat Sleeper reports as a per-game rate.
+ *
+ * This keeps upstream data available for sport-specific profile logic without
+ * equating presence with support. A profile's pointsScoring declarations
+ * remain the authority for which imported league settings affect rankings.
+ *
+ * `gp` is the divisor and `sp` is seconds of playing time, so both are handled
+ * by the caller rather than divided blindly.
+ */
+export function perGameRates(playerId: string, line: SleeperStatLine): PlayerRates | null {
+  const gp = typeof line.gp === "number" && isFinite(line.gp) ? line.gp : 0;
+  if (gp <= 0) return null;
+
+  const rates: PlayerRates = {
+    playerId,
+    gp,
+    mpg: (typeof line.sp === "number" ? line.sp : 0) / 60 / gp,
+  };
+
+  for (const [key, value] of Object.entries(line)) {
+    if (key === "gp" || key === "sp") continue;
+    if (typeof value !== "number" || !isFinite(value)) continue;
+    rates[key] = value / gp;
+  }
+  return rates;
+}

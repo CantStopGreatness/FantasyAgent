@@ -1,7 +1,11 @@
 import type { SleeperStatLine } from "@/lib/sleeper/types";
-import type { PlayerRates, PointScoringDef, SportProfile } from "./types";
-
-const num = (v: number | undefined): number => (typeof v === "number" && isFinite(v) ? v : 0);
+import {
+  perGameRates,
+  rateOf,
+  type PlayerRates,
+  type PointScoringDef,
+  type SportProfile,
+} from "./types";
 
 /**
  * Exact season-total fields in Sleeper's NBA player-stat payload that can also
@@ -44,29 +48,49 @@ const NBA_POINTS_SCORING: PointScoringDef[] = [
 
 /**
  * Sleeper returns season *totals* plus `gp`, and playing time as `sp` in
- * seconds — not minutes. Everything here is derived from that.
+ * seconds — not minutes.
+ *
+ * Every numeric stat passes through as a per-game rate for profile consumers.
+ * Points ranking still consults the explicit pointsScoring contract below, so
+ * an upstream field is not silently treated as supported merely because it is
+ * numeric. Exact composite and missed-shot rates are derived when Sleeper
+ * omits their redundant total.
  */
 function toRates(playerId: string, line: SleeperStatLine): PlayerRates | null {
-  const gp = num(line.gp);
-  if (gp <= 0) return null;
+  const rates = perGameRates(playerId, line);
+  if (!rates) return null;
 
-  const per = (v: number | undefined) => num(v) / gp;
-  const fga = per(line.fga);
-  const fta = per(line.fta);
-  const fgm = per(line.fgm);
-  const ftm = per(line.ftm);
-  const pointsRates = Object.fromEntries(
+  const per = (value: number | undefined) =>
+    typeof value === "number" && isFinite(value) ? value / rates.gp : 0;
+  const pointsRates: Record<string, number> = Object.fromEntries(
     NBA_POINTS_SCORING.map((stat) => [stat.rateKey, per(line[stat.key])]),
   );
-
-  return {
-    playerId,
-    gp,
-    mpg: num(line.sp) / 60 / gp,
-    ...pointsRates,
-    fgPct: fga > 0 ? fgm / fga : 0,
-    ftPct: fta > 0 ? ftm / fta : 0,
+  const fga = rateOf(rates, "fga");
+  const fta = rateOf(rates, "fta");
+  const fgm = rateOf(rates, "fgm");
+  const ftm = rateOf(rates, "ftm");
+  const tpm = rateOf(rates, "tpm");
+  const derivedRates: Record<string, number> = {
+    fgmi: fga - fgm,
+    ftmi: fta - ftm,
+    tpmi: rateOf(rates, "tpa") - tpm,
+    blk_stl: rateOf(rates, "blk") + rateOf(rates, "stl"),
+    pts_reb: rateOf(rates, "pts") + rateOf(rates, "reb"),
+    reb_ast: rateOf(rates, "reb") + rateOf(rates, "ast"),
+    pts_ast: rateOf(rates, "pts") + rateOf(rates, "ast"),
+    pts_reb_ast:
+      rateOf(rates, "pts") + rateOf(rates, "reb") + rateOf(rates, "ast"),
   };
+
+  for (const [key, value] of Object.entries(derivedRates)) {
+    const upstream = line[key];
+    if (typeof upstream !== "number" || !isFinite(upstream)) pointsRates[key] = value;
+  }
+
+  Object.assign(rates, pointsRates);
+  rates.fgPct = fga > 0 ? rateOf(rates, "fgm") / fga : 0;
+  rates.ftPct = fta > 0 ? rateOf(rates, "ftm") / fta : 0;
+  return rates;
 }
 
 export const nbaProfile: SportProfile = {

@@ -98,6 +98,19 @@ export type BoardResponse = {
   unscored?: number;
 };
 
+/** Conditions the manager attaches to a trade request. All optional. */
+export type TradeIntent = {
+  wantCategories: string[];
+  targetPlayerId: string | null;
+  protectedPlayerIds: string[];
+};
+
+export const EMPTY_INTENT: TradeIntent = {
+  wantCategories: [],
+  targetPlayerId: null,
+  protectedPlayerIds: [],
+};
+
 export type TradeResponse =
   | { found: false; reason: string }
   | {
@@ -106,11 +119,29 @@ export type TradeResponse =
       partnerTeamName: string;
       give: PlayerCard;
       receive: PlayerCard;
-      userNeed: string;
-      partnerNeed: string;
-      fairness: "even" | "you-give-up-value" | "you-gain-value";
+      /** Null when the deal came from a stated goal rather than a positional read. */
+      userNeed: string | null;
+      partnerNeed: string | null;
+      fairness: "even" | "you-give-up-value" | "you-gain-value" | "worth-the-overpay";
+      /** Movement in each category the manager asked to improve. */
+      goalDelta: { key: string; label: string; delta: number }[];
+      goalGain: number | null;
+      rationale: string;
       commentary: Commentary;
     };
+
+/** Category keys a manager can ask to improve, per sport. */
+export const NBA_CATEGORY_CHOICES: { key: string; label: string }[] = [
+  { key: "pts", label: "Points" },
+  { key: "reb", label: "Rebounds" },
+  { key: "ast", label: "Assists" },
+  { key: "stl", label: "Steals" },
+  { key: "blk", label: "Blocks" },
+  { key: "tpm", label: "Threes" },
+  { key: "fgPct", label: "FG%" },
+  { key: "ftPct", label: "FT%" },
+  { key: "to", label: "Fewer TOs" },
+];
 
 /** Persisted in localStorage so a refresh does not force a re-import. */
 export type Session = {

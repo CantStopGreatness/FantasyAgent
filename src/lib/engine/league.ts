@@ -7,6 +7,7 @@ import {
   getUser,
   SleeperError,
 } from "@/lib/sleeper/client";
+import { DEMO_FIXTURE, isDemoLeague } from "@/lib/demo";
 import type { SleeperLeague } from "@/lib/sleeper/types";
 import { DEFAULT_SPORT, getProfile, supportedSportLabels, type SportProfile } from "@/lib/sports";
 import { detectFormat, type ScoringFormat } from "./scoring";
@@ -16,7 +17,7 @@ import { parseLeagueRules, type LeagueRules, type RuleOverrides } from "./settin
  * Corrections the user made on the settings screen.
  *
  * `rules` only reach the analyst's context. `scoring` and `format` reach the
- * engine and change the rankings, which is why they arrive here rather than
+ * engine, where supported values change rankings, which is why they arrive here rather than
  * being applied client-side.
  */
 export type LeagueOverrides = {
@@ -107,11 +108,14 @@ export async function buildSnapshot(
   userId: string | null,
   overrides: LeagueOverrides = {},
 ): Promise<LeagueSnapshot> {
-  const league = await getLeague(leagueId);
+  const demo = isDemoLeague(leagueId) ? DEMO_FIXTURE : null;
+  const league = demo?.league ?? (await getLeague(leagueId));
   if (!league) throw new SleeperError(`No Sleeper league found with ID ${leagueId}`, 404);
 
   const profile = profileForLeague(league);
-  const [rosters, users] = await Promise.all([getRosters(leagueId), getLeagueUsers(leagueId)]);
+  const [rosters, users] = demo
+    ? [demo.rosters, demo.users]
+    : await Promise.all([getRosters(leagueId), getLeagueUsers(leagueId)]);
 
   const teams: LeagueTeam[] = rosters.map((r) => {
     const { teamName, ownerName } = teamNameFor(r.owner_id, users);
@@ -135,6 +139,7 @@ export async function buildSnapshot(
   const inferred = detectFormat(profile, scoringSettings);
   const format = overrides.format ?? inferred;
   const rules = parseLeagueRules(
+    profile,
     league,
     format,
     overrides.format == null,
@@ -144,7 +149,9 @@ export async function buildSnapshot(
 
   const rosteredIds = [...new Set(teams.flatMap((t) => t.playerIds))];
   const userTeam = teams.find((t) => t.isUserTeam) ?? null;
-  const { statsSeason, currentWeek } = await resolveSeasonContext(profile.id, league.season);
+  const { statsSeason, currentWeek } = demo
+    ? { statsSeason: demo.statsSeason, currentWeek: demo.currentWeek }
+    : await resolveSeasonContext(profile.id, league.season);
 
   return {
     leagueId,

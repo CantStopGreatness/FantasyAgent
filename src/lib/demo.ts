@@ -1,373 +1,238 @@
-import type { BoardResponse, TradeResponse } from "@/lib/types";
+import type {
+  SleeperLeague,
+  SleeperLeagueUser,
+  SleeperPlayer,
+  SleeperRoster,
+  SleeperStatLine,
+  StatsBySeason,
+} from "@/lib/sleeper/types";
 
-export const DEMO_BOARD_WAIVERS: BoardResponse = {
-  view: "waivers",
-  format: "category",
-  commentary: {
-    text: "Anthony Davis is the clear top pickup this week. Your league heavily rewards blocks and your roster is weak in both points and rebounds right now. Davis covers both at elite volume, and he draws four home games this week against soft frontcourt matchups.",
-    fallback: false,
-  },
-  players: [
-    {
-      playerId: "ad",
-      name: "Anthony Davis",
-      position: "C",
-      team: "LAL",
-      rank: 1,
-      score: 94.2,
-      scoreLabel: "+8.3 cats",
-      statLine: "25.4 pts · 12.6 reb · 2.4 blk · 1.3 stl",
-      injuryStatus: null,
-      tags: [
-        { label: "Top pickup", tone: "hot" },
-        { label: "4 games", tone: "good" },
-      ],
-      rankDelta: 3,
-      otherFormatRank: 2,
-      topCategories: [
-        { label: "BLK", z: 3.8 },
-        { label: "REB", z: 2.9 },
-        { label: "PTS", z: 2.1 },
-      ],
-      buzz: 92,
-    },
-    {
-      playerId: "js",
-      name: "Jabari Smith Jr.",
-      position: "PF",
-      team: "HOU",
-      rank: 2,
-      score: 71.4,
-      scoreLabel: "+5.1 cats",
-      statLine: "16.2 pts · 8.1 reb · 1.8 blk · 1.0 stl",
-      injuryStatus: null,
-      tags: [{ label: "Trending", tone: "good" }],
-      rankDelta: 7,
-      otherFormatRank: 14,
-      topCategories: [
-        { label: "BLK", z: 2.1 },
-        { label: "3PM", z: 1.8 },
-      ],
-      buzz: 74,
-    },
-    {
-      playerId: "og",
-      name: "OG Anunoby",
-      position: "SF",
-      team: "NYK",
-      rank: 3,
-      score: 68.9,
-      scoreLabel: "+4.8 cats",
-      statLine: "14.8 pts · 4.4 reb · 1.9 stl · 0.9 blk",
-      injuryStatus: null,
-      tags: [{ label: "Steals", tone: "good" }],
-      rankDelta: 2,
-      otherFormatRank: 18,
-      topCategories: [
-        { label: "STL", z: 2.6 },
-        { label: "3PM", z: 1.4 },
-      ],
-      buzz: 61,
-    },
-    {
-      playerId: "rh",
-      name: "Richaun Holmes",
-      position: "C",
-      team: "DAL",
-      rank: 4,
-      score: 61.2,
-      scoreLabel: "+3.9 cats",
-      statLine: "11.4 pts · 9.2 reb · 1.6 blk · 0.6 stl",
-      injuryStatus: null,
-      tags: [{ label: "Streaming", tone: "good" }],
-      rankDelta: -1,
-      otherFormatRank: 31,
-      topCategories: [
-        { label: "REB", z: 2.2 },
-        { label: "FG%", z: 1.9 },
-      ],
-      buzz: 44,
-    },
-    {
-      playerId: "mk",
-      name: "Maxi Kleber",
-      position: "PF",
-      team: "DAL",
-      rank: 5,
-      score: 54.7,
-      scoreLabel: "+3.1 cats",
-      statLine: "9.8 pts · 5.6 reb · 1.4 blk · 0.7 stl",
-      injuryStatus: "QUESTIONABLE",
-      tags: [{ label: "Injury risk", tone: "warn" }],
-      rankDelta: -4,
-      otherFormatRank: 44,
-      topCategories: [
-        { label: "3PM", z: 1.6 },
-        { label: "BLK", z: 1.2 },
-      ],
-      buzz: 38,
-    },
-  ],
+export const DEMO_LEAGUE_ID = "demo";
+export const DEMO_USER_ID = "demo-user";
+export const DEMO_FIXTURE_VERSION = "2026.08-v1";
+
+type RateTuple = [
+  mpg: number,
+  pts: number,
+  reb: number,
+  ast: number,
+  stl: number,
+  blk: number,
+  turnovers: number,
+  threes: number,
+  fieldGoalPct: number,
+  freeThrowPct: number,
+];
+
+type PlayerSeed = {
+  id: string;
+  name: string;
+  position: string;
+  team: string;
+  age: number;
+  line: RateTuple;
 };
 
-export const DEMO_BOARD_SLEEPERS: BoardResponse = {
-  view: "sleepers",
-  format: "category",
-  commentary: {
-    text: "Jalen Williams is the standout sleeper this week. His usage has climbed in five straight games since the Gilgeous-Alexander injury, and he is only rostered in 48% of leagues at your scoring level. If he is available, he is your highest-priority add.",
-    fallback: false,
-  },
-  players: [
-    {
-      playerId: "jw",
-      name: "Jalen Williams",
-      position: "SG",
-      team: "OKC",
-      rank: 1,
-      score: 81.3,
-      scoreLabel: "+6.4 cats",
-      statLine: "22.1 pts · 5.8 ast · 4.2 reb · 1.4 stl",
-      injuryStatus: null,
-      tags: [
-        { label: "Usage spike", tone: "hot" },
-        { label: "48% owned", tone: "good" },
-      ],
-      rankDelta: 12,
-      otherFormatRank: 9,
-      topCategories: [
-        { label: "PTS", z: 2.8 },
-        { label: "AST", z: 2.1 },
-        { label: "STL", z: 1.6 },
-      ],
-      buzz: 88,
-      reason: "Usage up 8% over last 5 games. Starting role locked in.",
-    },
-    {
-      playerId: "tb",
-      name: "Tari Eason",
-      position: "PF",
-      team: "HOU",
-      rank: 2,
-      score: 62.4,
-      scoreLabel: "+4.2 cats",
-      statLine: "13.6 pts · 6.8 reb · 1.8 stl · 0.8 blk",
-      injuryStatus: null,
-      tags: [{ label: "Role growing", tone: "good" }],
-      rankDelta: 9,
-      otherFormatRank: 28,
-      topCategories: [
-        { label: "STL", z: 2.4 },
-        { label: "REB", z: 1.7 },
-      ],
-      buzz: 71,
-      reason: "Minutes up to 31 per game over last week.",
-    },
-  ],
+export type DemoFixture = {
+  version: string;
+  league: SleeperLeague;
+  rosters: SleeperRoster[];
+  users: SleeperLeagueUser[];
+  players: Record<string, SleeperPlayer>;
+  seasonStats: StatsBySeason;
+  trendingAdds: Record<string, number>;
+  statsSeason: string;
+  currentWeek: null;
 };
 
-export const DEMO_BOARD_ROSTER: BoardResponse = {
-  view: "roster",
-  format: "category",
-  team: { rosterId: 1, teamName: "Your Team", ownerName: "You" },
-  commentary: null,
-  players: [
+const GAMES_PLAYED = 24;
+const seed = (
+  id: string,
+  name: string,
+  position: string,
+  team: string,
+  age: number,
+  line: RateTuple,
+): PlayerSeed => ({ id, name, position, team, age, line });
+
+/**
+ * Fictional players and teams keep the sample safe from stale news, injuries,
+ * transactions, and schedule claims. Devin leads at BLK=3; Marcus at BLK=5.
+ */
+const PLAYER_SEEDS: PlayerSeed[] = [
+  // Your Team: guard depth, balanced forwards, and one center.
+  seed("demo-u-ari", "Ari Monroe", "PG", "NTH", 27, [35, 21, 4, 8, 1.3, 0.2, 3.2, 2.4, 0.47, 0.84]),
+  seed("demo-u-blake", "Blake Turner", "SG", "CST", 26, [33, 18, 4, 4, 1.5, 0.4, 2.2, 2.2, 0.46, 0.81]),
+  seed("demo-u-cameron", "Cameron Reed", "PG", "WST", 24, [31, 15, 3, 7, 1, 0.1, 2.5, 1.6, 0.45, 0.82]),
+  seed("demo-u-drew", "Drew Ellis", "SF", "EST", 28, [34, 19, 7, 3, 1, 0.6, 2, 2, 0.49, 0.8]),
+  seed("demo-u-emery", "Emery Stone", "PF", "NTH", 29, [32, 14, 8, 2, 1, 1, 1.8, 1.1, 0.51, 0.77]),
+  seed("demo-u-finley", "Finley Brooks", "C", "CST", 30, [29, 12, 9, 2, 0.6, 1.5, 2, 0.4, 0.56, 0.74]),
+
+  // Paint Patrol: one guard and three centers create a complementary trade shape.
+  seed("demo-a-gray", "Gray Lawson", "PG", "EST", 27, [36, 26, 4, 5, 1.7, 0.4, 2.6, 2.7, 0.48, 0.86]),
+  seed("demo-a-harper", "Harper Lane", "SF", "WST", 25, [33, 18, 6, 4, 0.9, 0.7, 2, 1.8, 0.47, 0.8]),
+  seed("demo-a-indy", "Indy Ross", "PF", "NTH", 24, [31, 15, 7, 3, 1.2, 0.8, 1.8, 1.3, 0.5, 0.78]),
+  seed("demo-a-jules", "Jules Mercer", "C", "CST", 29, [35, 19, 12, 3, 0.8, 2.3, 2.4, 0.5, 0.58, 0.75]),
+  seed("demo-a-kai", "Kai Bennett", "C", "EST", 26, [31, 15, 10, 2, 0.7, 1.8, 2, 0.3, 0.57, 0.73]),
+  seed("demo-a-logan", "Logan Price", "C", "WST", 31, [25, 11, 8, 1, 0.5, 1.4, 1.5, 0.2, 0.59, 0.7]),
+
+  // Perimeter Lab: a distinct second opponent and distinct owned center target.
+  seed("demo-b-milan", "Milan Hayes", "PG", "NTH", 28, [34, 20, 5, 6, 1, 0.3, 2.5, 2, 0.46, 0.83]),
+  seed("demo-b-nico", "Nico Warren", "SF", "CST", 27, [35, 22, 8, 3, 1, 0.8, 2.4, 2.1, 0.49, 0.81]),
+  seed("demo-b-oakley", "Oakley James", "PF", "EST", 25, [32, 16, 6, 4, 1.4, 0.5, 2, 1.5, 0.48, 0.79]),
+  seed("demo-b-parker", "Parker Wynn", "SF", "WST", 24, [27, 13, 6, 2, 0.8, 0.7, 1.5, 1.4, 0.47, 0.78]),
+  seed("demo-b-quincy", "Quincy Ford", "C", "NTH", 30, [34, 18, 11, 2, 0.9, 2, 2.3, 0.4, 0.57, 0.76]),
+  seed("demo-b-remy", "Remy Clarke", "C", "CST", 26, [29, 13, 9, 3, 0.8, 1.6, 1.7, 0.6, 0.55, 0.75]),
+
+  // Available pool.
+  seed("demo-fa-devin", "Devin Cole", "SG", "EST", 27, [32, 22, 5, 6, 1, 0.3, 3, 2.8, 0.45, 0.85]),
+  seed("demo-fa-marcus", "Marcus Bell", "C", "NTH", 28, [29, 14, 10, 2, 0.8, 2.2, 2, 0.2, 0.58, 0.72]),
+  seed("demo-fa-eli", "Eli Grant", "PG", "WST", 26, [30, 16, 3, 7.5, 1, 0.2, 2.8, 1.7, 0.44, 0.82]),
+  seed("demo-fa-nova", "Nova Pierce", "SF", "CST", 25, [30, 18, 5, 3, 1.4, 0.5, 2, 2.1, 0.47, 0.8]),
+  seed("demo-fa-taylor", "Taylor Knox", "C", "EST", 29, [26, 10, 9, 2, 0.5, 1.7, 1.5, 0.2, 0.6, 0.68]),
+  seed("demo-fa-robin", "Robin Shaw", "SG", "NTH", 21, [20, 12, 3, 4, 1.2, 0.3, 1.5, 1.8, 0.46, 0.84]),
+  seed("demo-fa-sage", "Sage Porter", "PF", "WST", 23, [24, 14, 7, 2, 0.8, 0.9, 1.8, 1.2, 0.51, 0.76]),
+  seed("demo-fa-rory", "Rory Tate", "C", "CST", 24, [22, 9, 8, 1, 0.4, 1.5, 1.2, 0.1, 0.61, 0.69]),
+  seed("demo-fa-sky", "Skyler Moss", "SG", "EST", 25, [28, 19, 3, 2, 0.7, 0.1, 1.2, 3.2, 0.44, 0.87]),
+  seed("demo-fa-tegan", "Tegan Cross", "SF", "NTH", 22, [22, 10, 5, 2, 2, 0.8, 1.2, 1, 0.48, 0.79]),
+  seed("demo-fa-val", "Val Jordan", "PF", "WST", 26, [25, 11, 11, 1, 0.5, 1.1, 1.7, 0.4, 0.55, 0.74]),
+];
+
+/**
+ * Convert readable per-game lines to the season totals Sleeper returns.
+ * Shooting makes are derived so points, makes, attempts, and percentages agree.
+ */
+function sleeperTotals(line: RateTuple): SleeperStatLine {
+  const [mpg, pts, reb, ast, stl, blk, turnovers, threes, fgPct, ftPct] = line;
+  const ftm = pts * 0.18;
+  const fgm = (pts - threes - ftm) / 2;
+  const fga = fgm / fgPct;
+  const fta = ftm / ftPct;
+  const total = (value: number) => value * GAMES_PLAYED;
+
+  return {
+    gp: GAMES_PLAYED,
+    sp: total(mpg * 60),
+    pts: total(pts),
+    reb: total(reb),
+    oreb: total(reb * 0.27),
+    dreb: total(reb * 0.73),
+    ast: total(ast),
+    stl: total(stl),
+    blk: total(blk),
+    to: total(turnovers),
+    tpm: total(threes),
+    tpa: total(threes / 0.36),
+    fgm: total(fgm),
+    fga: total(fga),
+    ftm: total(ftm),
+    fta: total(fta),
+    fgmi: total(fga - fgm),
+    ftmi: total(fta - ftm),
+    tpmi: total(threes / 0.36 - threes),
+  };
+}
+
+const players: Record<string, SleeperPlayer> = Object.fromEntries(
+  PLAYER_SEEDS.map((entry) => [
+    entry.id,
     {
-      playerId: "lj",
-      name: "LeBron James",
-      position: "SF",
-      team: "LAL",
-      rank: 4,
-      score: 88.1,
-      scoreLabel: "+7.1 cats",
-      statLine: "24.8 pts · 7.4 ast · 7.1 reb · 1.3 stl",
-      injuryStatus: null,
-      tags: [{ label: "Anchor", tone: "hot" }],
-      rankDelta: 0,
-      otherFormatRank: 3,
-      topCategories: [
-        { label: "PTS", z: 2.4 },
-        { label: "AST", z: 2.8 },
-        { label: "REB", z: 1.6 },
-      ],
-      buzz: 79,
+      player_id: entry.id,
+      full_name: entry.name,
+      first_name: entry.name.split(" ")[0],
+      last_name: entry.name.split(" ").slice(1).join(" "),
+      team: entry.team,
+      active: true,
+      fantasy_positions: [entry.position],
+      injury_status: null,
+      age: entry.age,
+      number: null,
     },
-    {
-      playerId: "jt",
-      name: "Jayson Tatum",
-      position: "SF",
-      team: "BOS",
-      rank: 7,
-      score: 82.4,
-      scoreLabel: "+6.2 cats",
-      statLine: "27.1 pts · 8.2 reb · 4.4 ast · 1.1 stl",
-      injuryStatus: null,
-      tags: [{ label: "Core", tone: "good" }],
-      rankDelta: 1,
-      otherFormatRank: 6,
-      topCategories: [
-        { label: "PTS", z: 3.1 },
-        { label: "REB", z: 1.8 },
-      ],
-      buzz: 65,
+  ]),
+);
+
+const seasonStats: StatsBySeason = Object.fromEntries(
+  PLAYER_SEEDS.map((entry) => [entry.id, sleeperTotals(entry.line)]),
+);
+
+const rosters: SleeperRoster[] = [
+  {
+    roster_id: 1,
+    owner_id: DEMO_USER_ID,
+    league_id: DEMO_LEAGUE_ID,
+    players: ["demo-u-ari", "demo-u-blake", "demo-u-cameron", "demo-u-drew", "demo-u-emery", "demo-u-finley"],
+    starters: ["demo-u-ari", "demo-u-blake", "demo-u-drew", "demo-u-emery", "demo-u-finley"],
+    settings: {},
+  },
+  {
+    roster_id: 2,
+    owner_id: "demo-owner-paint",
+    league_id: DEMO_LEAGUE_ID,
+    players: ["demo-a-gray", "demo-a-harper", "demo-a-indy", "demo-a-jules", "demo-a-kai", "demo-a-logan"],
+    starters: ["demo-a-gray", "demo-a-harper", "demo-a-indy", "demo-a-jules", "demo-a-kai"],
+    settings: {},
+  },
+  {
+    roster_id: 3,
+    owner_id: "demo-owner-perimeter",
+    league_id: DEMO_LEAGUE_ID,
+    players: ["demo-b-milan", "demo-b-nico", "demo-b-oakley", "demo-b-parker", "demo-b-quincy", "demo-b-remy"],
+    starters: ["demo-b-milan", "demo-b-nico", "demo-b-oakley", "demo-b-quincy", "demo-b-remy"],
+    settings: {},
+  },
+];
+
+const users: SleeperLeagueUser[] = [
+  { user_id: DEMO_USER_ID, display_name: "You", avatar: null, metadata: { team_name: "Your Team" } },
+  { user_id: "demo-owner-paint", display_name: "Alex", avatar: null, metadata: { team_name: "Paint Patrol" } },
+  { user_id: "demo-owner-perimeter", display_name: "Jordan", avatar: null, metadata: { team_name: "Perimeter Lab" } },
+];
+
+/** The only persisted demo source; all user-facing results are derived from it. */
+export const DEMO_FIXTURE: DemoFixture = {
+  version: DEMO_FIXTURE_VERSION,
+  league: {
+    league_id: DEMO_LEAGUE_ID,
+    name: "CourtIQ Frozen Demo " + DEMO_FIXTURE_VERSION,
+    season: DEMO_FIXTURE_VERSION,
+    sport: "nba",
+    total_rosters: rosters.length,
+    status: "complete",
+    avatar: null,
+    scoring_settings: {
+      pts: 1,
+      reb: 1.2,
+      ast: 1.5,
+      stl: 3,
+      blk: 3,
+      to: -1,
+      // Visible but excluded: there is no exact event-level rate for this bonus.
+      bonus_pt_40p: 4,
     },
-    {
-      playerId: "de",
-      name: "De'Aaron Fox",
-      position: "PG",
-      team: "SAC",
-      rank: 18,
-      score: 66.2,
-      scoreLabel: "+4.1 cats",
-      statLine: "24.2 pts · 5.8 ast · 3.4 reb · 1.6 stl",
-      injuryStatus: null,
-      tags: [{ label: "Solid", tone: "good" }],
-      rankDelta: -2,
-      otherFormatRank: 22,
-      topCategories: [
-        { label: "STL", z: 2.1 },
-        { label: "PTS", z: 1.9 },
-      ],
-      buzz: 51,
+    roster_positions: ["PG", "SG", "SF", "PF", "C", "BN"],
+    settings: {
+      waiver_type: 2,
+      waiver_budget: 100,
+      playoff_teams: 2,
+      type: 0,
+      disable_trades: 0,
     },
-    {
-      playerId: "bm",
-      name: "Brook Lopez",
-      position: "C",
-      team: "MIL",
-      rank: 34,
-      score: 48.1,
-      scoreLabel: "+2.4 cats",
-      statLine: "12.4 pts · 4.8 reb · 2.6 blk · 0.6 stl",
-      injuryStatus: "QUESTIONABLE",
-      tags: [{ label: "Injury risk", tone: "warn" }],
-      rankDelta: -6,
-      otherFormatRank: 41,
-      topCategories: [
-        { label: "BLK", z: 3.2 },
-        { label: "3PM", z: 1.4 },
-      ],
-      buzz: 42,
-    },
-  ],
+  },
+  rosters,
+  users,
+  players,
+  seasonStats,
+  trendingAdds: {
+    "demo-fa-robin": 48,
+    "demo-fa-tegan": 42,
+    "demo-fa-rory": 36,
+    "demo-fa-sage": 28,
+    "demo-fa-taylor": 18,
+  },
+  statsSeason: DEMO_FIXTURE_VERSION,
+  currentWeek: null,
 };
 
-export const DEMO_TRADE: TradeResponse = {
-  found: true,
-  format: "category",
-  partnerTeamName: "Hoop Dreams",
-  give: {
-    playerId: "de",
-    name: "De'Aaron Fox",
-    position: "PG",
-    team: "SAC",
-    rank: 18,
-    score: 66.2,
-    scoreLabel: "+4.1 cats",
-    statLine: "24.2 pts · 5.8 ast · 3.4 reb · 1.6 stl",
-    injuryStatus: null,
-    tags: [{ label: "Solid", tone: "good" }],
-    rankDelta: -2,
-    otherFormatRank: 22,
-    topCategories: [
-      { label: "STL", z: 2.1 },
-      { label: "PTS", z: 1.9 },
-    ],
-    buzz: 51,
-  },
-  receive: {
-    playerId: "ad",
-    name: "Anthony Davis",
-    position: "C",
-    team: "LAL",
-    rank: 1,
-    score: 94.2,
-    scoreLabel: "+8.3 cats",
-    statLine: "25.4 pts · 12.6 reb · 2.4 blk · 1.3 stl",
-    injuryStatus: null,
-    tags: [
-      { label: "Top pickup", tone: "hot" },
-      { label: "4 games", tone: "good" },
-    ],
-    rankDelta: 3,
-    otherFormatRank: 2,
-    topCategories: [
-      { label: "BLK", z: 3.8 },
-      { label: "REB", z: 2.9 },
-      { label: "PTS", z: 2.1 },
-    ],
-    buzz: 92,
-  },
-  userNeed: "blocks and rebounds",
-  partnerNeed: "assists and steals",
-  fairness: "you-gain-value",
-  commentary: {
-    text: "This trade works because your roster is elite in assists and steals but ranks near the bottom in blocks and rebounds. Hoop Dreams has the opposite problem. Davis fills your two weakest categories at an elite level, and Fox is a fair price — he is your fourth-best player but their biggest need.",
-    fallback: false,
-  },
-};
-
-export const DEMO_ROSTER_PARTNER: BoardResponse = {
-  view: "roster",
-  format: "category",
-  team: { rosterId: 2, teamName: "Hoop Dreams", ownerName: "Alex" },
-  commentary: null,
-  players: [
-    {
-      playerId: "ad",
-      name: "Anthony Davis",
-      position: "C",
-      team: "LAL",
-      rank: 1,
-      score: 94.2,
-      scoreLabel: "+8.3 cats",
-      statLine: "25.4 pts · 12.6 reb · 2.4 blk · 1.3 stl",
-      injuryStatus: null,
-      tags: [{ label: "Anchor", tone: "hot" }],
-      rankDelta: 3,
-      otherFormatRank: 2,
-      topCategories: [
-        { label: "BLK", z: 3.8 },
-        { label: "REB", z: 2.9 },
-      ],
-      buzz: 92,
-    },
-    {
-      playerId: "sh",
-      name: "Shai Gilgeous-Alexander",
-      position: "PG",
-      team: "OKC",
-      rank: 2,
-      score: 91.1,
-      scoreLabel: "+7.8 cats",
-      statLine: "30.1 pts · 5.5 ast · 4.8 reb · 2.1 stl",
-      injuryStatus: null,
-      tags: [{ label: "Core", tone: "hot" }],
-      rankDelta: 0,
-      otherFormatRank: 1,
-      topCategories: [
-        { label: "PTS", z: 3.6 },
-        { label: "STL", z: 2.4 },
-      ],
-      buzz: 88,
-    },
-    {
-      playerId: "kd",
-      name: "Kevin Durant",
-      position: "SF",
-      team: "PHX",
-      rank: 9,
-      score: 79.4,
-      scoreLabel: "+5.9 cats",
-      statLine: "27.3 pts · 6.6 reb · 5.0 ast · 0.9 stl",
-      injuryStatus: null,
-      tags: [{ label: "Solid", tone: "good" }],
-      rankDelta: -1,
-      otherFormatRank: 7,
-      topCategories: [
-        { label: "PTS", z: 3.1 },
-        { label: "REB", z: 1.4 },
-      ],
-      buzz: 72,
-    },
-  ],
-};
+export function isDemoLeague(leagueId: string): boolean {
+  return leagueId === DEMO_LEAGUE_ID;
+}

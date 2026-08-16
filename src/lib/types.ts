@@ -42,11 +42,13 @@ export type LeagueSetting = {
   edited?: boolean;
 };
 
-/** One per-stat point value. In a points league these are the ranking. */
+/** One imported per-stat point value, annotated with engine support. */
 export type ScoringStat = {
   key: string;
   label: string;
   value: number;
+  /** True when CourtIQ has an exact player rate used by the ranking engine. */
+  supported: boolean;
   edited?: boolean;
 };
 
@@ -120,7 +122,7 @@ export type Session = {
   teams: TeamInfo[];
   /**
    * Corrections the user made on the settings screen. Sent with every request
-   * so they survive a reload — and because scoring edits change the rankings,
+   * so they survive a reload — and because supported scoring edits change rankings,
    * they must be applied server-side rather than only in the UI.
    */
   confirmedFormat: ScoringFormat | null;

@@ -11,6 +11,7 @@ import type {
 
 const BASE = "https://api.sleeper.app/v1";
 const CACHE_DIR = path.join(process.cwd(), ".cache");
+export const SLEEPER_TIMEOUT_MS = 12_000;
 
 /** Thrown for expected, user-facing failures (bad username, unknown league). */
 export class SleeperError extends Error {
@@ -24,26 +25,35 @@ export class SleeperError extends Error {
 }
 
 async function getJSON<T>(endpoint: string): Promise<T | null> {
-  const res = await fetch(`${BASE}${endpoint}`, {
-    headers: { accept: "application/json" },
-    // We do our own disk caching; don't let Next's fetch cache hold the 2.4MB
-    // player dictionary in memory on every route.
-    cache: "no-store",
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SLEEPER_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${BASE}${endpoint}`, {
+      headers: { accept: "application/json" },
+      signal: controller.signal,
+      cache: "no-store",
+    });
 
-  if (res.status === 404) return null;
-  if (!res.ok) {
-    throw new SleeperError(
-      `Sleeper API returned ${res.status} for ${endpoint}`,
-      res.status === 429 ? 429 : 502,
-    );
+    if (res.status === 404) return null;
+    if (!res.ok) {
+      throw new SleeperError(
+        `Sleeper API returned ${res.status} for ${endpoint}`,
+        res.status === 429 ? 429 : 502,
+      );
+    }
+
+    const body = (await res.json()) as T | null;
+    return body ?? null;
+  } catch (err) {
+    if (err instanceof SleeperError) throw err;
+    if (err instanceof Error && (err.name === "AbortError" || controller.signal.aborted)) {
+      throw new SleeperError("Sleeper took too long to respond. Try again in a moment.", 504);
+    }
+    throw new SleeperError("Could not reach Sleeper. Try again in a moment.", 502);
+  } finally {
+    clearTimeout(timer);
   }
-
-  const body = (await res.json()) as T | null;
-  // Sleeper answers unknown users/leagues with a literal `null` body and a 200.
-  return body ?? null;
 }
-
 /* ── Disk cache ─────────────────────────────────────────────────────────────
  * The player dictionary is ~2.4MB and season stats ~320KB. Both are static
  * enough to fetch once and reuse. We keep an in-process memo so warm requests

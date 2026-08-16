@@ -38,7 +38,7 @@ export function PersonaCallout({
         {commentary.fallback && (
           <span
             className="rounded-full border border-edge px-2 py-0.5 text-[0.65rem] normal-case tracking-normal text-muted"
-            title="Set ANTHROPIC_API_KEY in .env.local for live analyst commentary"
+            title="Configure optional Ollama Cloud narration server-side"
           >
             offline read
           </span>

@@ -16,7 +16,7 @@ const barlow = Barlow_Condensed({
 export const metadata: Metadata = {
   title: "CourtIQ: Fantasy League Intelligence",
   description:
-    "League-aware fantasy recommendations scored against your league's real rules, not a generic ranking.",
+    "Sleeper NBA league analysis with deterministic scoring, availability filtering, and optional Ollama Cloud explanations.",
 };
 
 export default function RootLayout({

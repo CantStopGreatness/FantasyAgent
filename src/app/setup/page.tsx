@@ -33,7 +33,7 @@ export default function Setup() {
     resolvedUserId: string | null,
     o: Overrides = EMPTY_OVERRIDES,
   ) {
-    setStatus("Reading rosters, scoring settings, and league rules…");
+    setStatus("Reading rosters, scoring settings, and league rulesÃ¢â‚¬Â¦");
     const res = await fetch("/api/snapshot", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -65,7 +65,7 @@ export default function Setup() {
       if (mode === "leagueId") {
         await loadLeague(value.trim(), null);
       } else {
-        setStatus("Finding your leagues…");
+        setStatus("Finding your leaguesÃ¢â‚¬Â¦");
         const res = await fetch("/api/leagues", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -111,7 +111,7 @@ export default function Setup() {
   /**
    * Re-read the league under the user's corrections.
    *
-   * Scoring edits change the rankings, so this round-trips rather than just
+   * Supported scoring edits change the rankings, so this round-trips rather than just
    * updating the display.
    */
   async function applyOverrides(next: Overrides) {
@@ -161,8 +161,8 @@ export default function Setup() {
           Connect your league
         </h1>
         <p className="mt-3 max-w-lg text-muted">
-          CourtIQ reads your league straight from Sleeper: rosters, scoring settings, and the
-          rules that decide what a good move actually is.
+          CourtIQ reads your NBA league from Sleeper: rosters, scoring settings, and league
+          context for the optional analyst explanation.
         </p>
 
         <form onSubmit={handleSubmit} className="mt-10">
@@ -203,7 +203,7 @@ export default function Setup() {
               disabled={busy || !value.trim()}
               className="rounded-lg bg-orange px-7 py-3.5 font-display text-base font-semibold uppercase tracking-wide text-[#1a0d06] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {busy ? "Importing…" : "Import"}
+              {busy ? "ImportingÃ¢â‚¬Â¦" : "Import"}
             </button>
           </div>
         </form>
@@ -243,11 +243,11 @@ export default function Setup() {
                     <span>
                       <span className="block font-medium">{l.name}</span>
                       <span className="text-sm text-muted">
-                        {l.season} season · {l.teamCount} teams
+                        {l.season} season Ã‚Â· {l.teamCount} teams
                       </span>
                     </span>
                     <span aria-hidden className="text-muted">
-                      →
+                      Ã¢â€ â€™
                     </span>
                   </button>
                 </li>
@@ -310,7 +310,7 @@ function ConfirmLeague({
         {league.name}
       </h2>
       <p className="mt-1.5 text-sm text-muted">
-        {league.sportLabel} · {league.teamCount} teams · scoring against the {league.statsSeason}{" "}
+        {league.sportLabel} Ã‚Â· {league.teamCount} teams Ã‚Â· scoring against the {league.statsSeason}{" "}
         season
         {league.statsSeason !== league.season && " (the last one played)"}
       </p>
@@ -320,7 +320,7 @@ function ConfirmLeague({
           { label: "Format", value: FORMAT_LABEL[league.format] },
           {
             label: "Starting slots",
-            value: league.rosterSize ? String(league.rosterSize) : "—",
+            value: league.rosterSize ? String(league.rosterSize) : "Ã¢â‚¬â€",
           },
           { label: "Rostered players", value: String(league.rosteredCount) },
           { label: "With scoreable stats", value: String(league.scoredCount) },
@@ -350,13 +350,13 @@ function ConfirmLeague({
             <span className="mt-1 block text-xs text-muted">
               {setCount} rule{setCount === 1 ? "" : "s"} and {scoring.length} scoring value
               {scoring.length === 1 ? "" : "s"} read from Sleeper
-              {editCount > 0 && ` · ${editCount} edited`}
+              {editCount > 0 && ` Ã‚Â· ${editCount} edited`}
             </span>
           </span>
           <span className="shrink-0 whitespace-nowrap text-xs text-muted">
             {open ? "Hide" : "Review & edit"}{" "}
             <span aria-hidden className={open ? "inline-block rotate-180" : "inline-block"}>
-              ▾
+              Ã¢â€“Â¾
             </span>
           </span>
         </button>
@@ -390,7 +390,7 @@ function ConfirmLeague({
         disabled={busy}
         className="mt-7 w-full rounded-lg bg-orange px-7 py-4 font-display text-lg font-semibold uppercase tracking-wide text-[#1a0d06] transition hover:brightness-110 disabled:opacity-40 sm:w-auto"
       >
-        Looks right, continue →
+        Looks right, continue Ã¢â€ â€™
       </button>
     </section>
   );

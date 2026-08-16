@@ -14,6 +14,11 @@ const FAIRNESS_COPY: Record<string, { label: string; className: string }> = {
 export function TradePanel({ session }: { session: Session }) {
   const format = session.league.format;
   const opponents = session.teams.filter((t) => !t.isUserTeam);
+  const analysisKey = JSON.stringify({
+    format,
+    rules: Object.entries(session.ruleOverrides).sort(),
+    scoring: Object.entries(session.scoringOverrides).sort(),
+  });
   const [selected, setSelected] = useState<number | null>(opponents[0]?.rosterId ?? null);
 
   const [roster, setRoster] = useState<BoardResponse | null>(null);
@@ -25,28 +30,25 @@ export function TradePanel({ session }: { session: Session }) {
   // Tagging it with that key retires it automatically when either changes,
   // rather than clearing it from an effect.
   const [suggestion, setSuggestion] = useState<{ key: string; data: TradeResponse } | null>(null);
-  const tradeKey = `${selected}:${format}`;
+  const tradeKey = `${selected}:${analysisKey}`;
   const trade = suggestion?.key === tradeKey ? suggestion.data : null;
 
   const rosterCache = useRef(new Map<string, BoardResponse>());
+  const activeRosterKey = useRef("");
 
   const loadRoster = useCallback(
     async (rosterId: number, fmt: ScoringFormat) => {
-      const key = `${rosterId}:${fmt}`;
+      const key = `${rosterId}:${fmt}:${analysisKey}`;
+      activeRosterKey.current = key;
       const cached = rosterCache.current.get(key);
       if (cached) {
         setRoster(cached);
         return;
       }
 
-      // Demo mode — return pre-built roster data.
-      if (session.leagueId === "demo") {
-        const { DEMO_ROSTER_PARTNER } = await import("@/lib/demo");
-        setRoster(DEMO_ROSTER_PARTNER);
-        return;
-      }
-
+      // Every selected roster comes from the same board API as live mode.
       setRosterLoading(true);
+      setRoster(null);
       setError(null);
       try {
         const res = await fetch("/api/board", {
@@ -64,16 +66,21 @@ export function TradePanel({ session }: { session: Session }) {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Could not load that roster.");
+        if (data.team?.rosterId !== rosterId) {
+          throw new Error("The selected team did not match the returned roster.");
+        }
         rosterCache.current.set(key, data);
-        setRoster(data);
+        if (activeRosterKey.current === key) setRoster(data);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Something went wrong.");
-        setRoster(null);
+        if (activeRosterKey.current === key) {
+          setError(err instanceof Error ? err.message : "Something went wrong.");
+          setRoster(null);
+        }
       } finally {
-        setRosterLoading(false);
+        if (activeRosterKey.current === key) setRosterLoading(false);
       }
     },
-    [session],
+    [analysisKey, session],
   );
 
   useEffect(() => {
@@ -83,13 +90,7 @@ export function TradePanel({ session }: { session: Session }) {
   async function suggestTrade() {
     if (selected === null || tradeLoading) return;
 
-    // Demo mode — return pre-built trade.
-    if (session.leagueId === "demo") {
-      const { DEMO_TRADE } = await import("@/lib/demo");
-      setSuggestion({ key: tradeKey, data: DEMO_TRADE });
-      return;
-    }
-
+    // The deterministic trade route owns partner selection and player ownership.
     setTradeLoading(true);
     setError(null);
     try {
@@ -107,6 +108,10 @@ export function TradePanel({ session }: { session: Session }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Could not build a trade.");
+      const expectedPartner = session.teams.find((team) => team.rosterId === selected);
+      if (data.found && data.partnerTeamName !== expectedPartner?.teamName) {
+        throw new Error("The selected team did not match the returned trade.");
+      }
       setSuggestion({ key: tradeKey, data: data as TradeResponse });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
@@ -136,7 +141,7 @@ export function TradePanel({ session }: { session: Session }) {
       <div>
         <h1 className="font-display text-3xl font-bold uppercase tracking-tight">Trade desk</h1>
         <p className="mt-1.5 text-sm text-muted">
-          Pick a team, read their roster, and let CourtIQ find the imbalance.
+          Pick a team and compare deterministic position-group depth.
         </p>
       </div>
 
@@ -174,7 +179,7 @@ export function TradePanel({ session }: { session: Session }) {
               disabled={tradeLoading || rosterLoading}
               className="rounded-lg bg-orange px-6 py-3 font-display text-sm font-semibold uppercase tracking-wide text-[#1a0d06] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {tradeLoading ? "Working the phones…" : "Suggest a trade"}
+              {tradeLoading ? "Working the phones..." : "Suggest a trade"}
             </button>
           </div>
 
@@ -187,7 +192,7 @@ export function TradePanel({ session }: { session: Session }) {
                       <TradeSide
                         label="You send"
                         name={trade.give.name}
-                        meta={`${trade.give.position} · ${trade.give.team}`}
+                        meta={`${trade.give.position} / ${trade.give.team}`}
                         stats={trade.give.statLine}
                         score={trade.give.scoreLabel}
                       />
@@ -195,13 +200,13 @@ export function TradePanel({ session }: { session: Session }) {
                         aria-hidden
                         className="grid place-items-center font-display text-2xl text-muted"
                       >
-                        <span className="hidden sm:block">⇄</span>
-                        <span className="sm:hidden">↓</span>
+                        <span className="hidden sm:block">&harr;</span>
+                        <span className="sm:hidden">&darr;</span>
                       </div>
                       <TradeSide
                         label="You get"
                         name={trade.receive.name}
-                        meta={`${trade.receive.position} · ${trade.receive.team}`}
+                        meta={`${trade.receive.position} / ${trade.receive.team}`}
                         stats={trade.receive.statLine}
                         score={trade.receive.scoreLabel}
                         highlight
@@ -210,11 +215,11 @@ export function TradePanel({ session }: { session: Session }) {
 
                     <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-edge pt-5 text-xs text-muted">
                       <span>
-                        You&apos;re thin at{" "}
+                        Your lowest-scoring position group is{" "}
                         <span className="text-ink">{trade.userNeed}</span>
                       </span>
                       <span>
-                        They&apos;re thin at{" "}
+                        Their lowest-scoring position group is{" "}
                         <span className="text-ink">{trade.partnerNeed}</span>
                       </span>
                       <span className={FAIRNESS_COPY[trade.fairness]?.className}>

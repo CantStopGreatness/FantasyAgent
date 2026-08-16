@@ -53,13 +53,12 @@ export default function Dashboard() {
   /**
    * Apply a settings correction made from the top bar.
    *
-   * Scoring edits change the rankings, so the cached boards are dropped and
+   * Supported scoring edits change the rankings, so the cached boards are dropped and
    * the league is re-read rather than the display simply being relabelled.
    */
   const applyOverrides = useCallback(
     async (next: Overrides) => {
       if (!session) return;
-      if (session.leagueId === "demo") return;
       setLoading(true);
       setError(null);
       try {
@@ -77,7 +76,7 @@ export default function Dashboard() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Could not apply those settings.");
 
-        // A scoring correction re-scores everything, so every held board is stale.
+        // A supported scoring correction re-scores everything, so every held board is stale.
         setBoards({});
         saveSession({
           ...session,
@@ -89,7 +88,7 @@ export default function Dashboard() {
           scoringOverrides: next.scoring,
         });
         // useSession reads localStorage through an external store, which the
-        // storage event only fires for *other* tabs — nudge this one.
+        // The storage event only fires for other tabs, so nudge this one.
         window.dispatchEvent(new StorageEvent("storage", { key: "courtiq.session" }));
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong.");
@@ -104,21 +103,7 @@ export default function Dashboard() {
     async (view: "waivers" | "sleepers" | "roster") => {
       if (!session) return;
 
-      // Demo mode — pre-built data, no Sleeper call.
-      if (session.leagueId === "demo") {
-        const { DEMO_BOARD_WAIVERS, DEMO_BOARD_SLEEPERS, DEMO_BOARD_ROSTER } =
-          await import("@/lib/demo");
-        const demoData =
-          view === "waivers"
-            ? DEMO_BOARD_WAIVERS
-            : view === "sleepers"
-              ? DEMO_BOARD_SLEEPERS
-              : DEMO_BOARD_ROSTER;
-        setBoards((b) => ({ ...b, [view]: demoData }));
-        setError(null);
-        return;
-      }
-
+      // Demo and live leagues both use the same API and deterministic engine.
       setLoading(true);
       setError(null);
       try {
@@ -149,7 +134,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!session || tab === "trades") return;
-    // Already loaded — nothing to do, and nothing to write into state.
+    // Already loaded; nothing to do and nothing to write into state.
     if (boards[activeView]) return;
     // The only synchronous state write left inside fetchBoard is the loading
     // flag that marks the request starting, which is the intended pattern for
@@ -161,7 +146,7 @@ export default function Dashboard() {
   if (!session) {
     return (
       <main className="grid min-h-dvh place-items-center">
-        <p className="text-muted">Loading your league…</p>
+        <p className="text-muted">Loading your league...</p>
       </main>
     );
   }
@@ -170,7 +155,7 @@ export default function Dashboard() {
 
   return (
     <main className="min-h-dvh">
-      {/* Slim top bar — league settings live here as a badge, not a sidebar. */}
+      {/* Slim top bar; league settings live here as a badge, not a sidebar. */}
       <header className="sticky top-0 z-20 border-b border-edge bg-bg/90 backdrop-blur">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-4 gap-y-3 px-6 py-4">
           <Link href="/" className="font-display text-xl font-bold tracking-wide">
@@ -182,7 +167,7 @@ export default function Dashboard() {
           <div className="min-w-0 flex-1">
             <p className="truncate font-medium leading-tight">{league.name}</p>
             <p className="text-xs text-muted">
-              {league.teamCount} teams · {league.statsSeason} stats
+              {league.teamCount} teams / {league.statsSeason} stats
             </p>
           </div>
 
@@ -261,8 +246,8 @@ function BoardView({
     tab === "waivers"
       ? `Unrostered players, ranked for your league's ${formatWord} scoring.`
       : tab === "sleepers"
-        ? "Under-owned players whose role is growing."
-        : "Your roster, scored under your league's rules.";
+        ? "Available players surfaced by recent form, Sleeper add activity, and per-36 output."
+        : "Your roster, scored under the active scoring setup.";
 
   if (tab === "team" && league.userTeamId === null) {
     return (
@@ -276,6 +261,12 @@ function BoardView({
   return (
     <div className="space-y-8">
       <div>
+        {session.leagueId === "demo" && (
+          <p className="mb-3 text-xs uppercase tracking-[0.12em] text-muted">
+            Frozen synthetic sample - not current player, team, injury, schedule, or ownership
+            information.
+          </p>
+        )}
         <h1 className="font-display text-3xl font-bold uppercase tracking-tight">{heading}</h1>
         <p className="mt-1.5 text-sm text-muted">{blurb}</p>
       </div>
@@ -287,7 +278,7 @@ function BoardView({
           title="Nothing to show here"
           body={
             tab === "waivers"
-              ? "Every fantasy-relevant player in this league is already rostered — a good problem to have."
+              ? "Every fantasy-relevant player in this league is already rostered - a good problem to have."
               : "We could not score enough players for this view."
           }
         />

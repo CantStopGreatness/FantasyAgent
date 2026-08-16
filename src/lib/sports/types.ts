@@ -32,6 +32,19 @@ export type PositionGroupDef = {
 };
 
 /**
+ * One points-league scoring key CourtIQ can evaluate exactly.
+ *
+ * rateKey names the normalized per-game value placed on PlayerRates.
+ * Keeping this mapping in the sport profile makes support an engine contract,
+ * rather than an assumption made independently by the scorer and UI.
+ */
+export type PointScoringDef = {
+  key: string;
+  label: string;
+  rateKey: string;
+};
+
+/**
  * Everything the engine needs to know about a sport.
  *
  * The math around these — z-scores, weighted points, positional imbalance —
@@ -49,6 +62,8 @@ export type SportProfile = {
    */
   supportsCategories: boolean;
   categories: CategoryDef[];
+  /** Imported points-scoring keys backed by exact upstream player stats. */
+  pointsScoring: PointScoringDef[];
   /** Convert one Sleeper stat line into per-game rates, or null if unusable. */
   toRates: (playerId: string, line: SleeperStatLine) => PlayerRates | null;
   positionGroups: PositionGroupDef[];
@@ -74,4 +89,39 @@ export type PlayerRates = {
 export function rateOf(rates: PlayerRates, key: string): number {
   const v = rates[key];
   return typeof v === "number" && isFinite(v) ? v : 0;
+}
+
+/** The declared scoring definition for an imported key, if CourtIQ supports it. */
+export function pointScoringDef(
+  profile: SportProfile,
+  key: string,
+): PointScoringDef | null {
+  return profile.pointsScoring.find((stat) => stat.key === key) ?? null;
+}
+
+export function isScoringKeySupported(profile: SportProfile, key: string): boolean {
+  return pointScoringDef(profile, key) !== null;
+}
+
+/**
+ * Read the normalized rate promised by the sport profile.
+ *
+ * Unsupported keys return null. A declared key with no numeric rate is a
+ * broken profile and throws instead of silently behaving like a zero.
+ */
+export function pointScoringRate(
+  profile: SportProfile,
+  rates: PlayerRates,
+  key: string,
+): number | null {
+  const def = pointScoringDef(profile, key);
+  if (!def) return null;
+
+  const value = rates[def.rateKey];
+  if (typeof value !== "number" || !isFinite(value)) {
+    throw new Error(
+      'Supported scoring key "' + key + '" has no numeric player rate "' + def.rateKey + '"',
+    );
+  }
+  return value;
 }

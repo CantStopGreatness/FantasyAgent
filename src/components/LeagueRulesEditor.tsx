@@ -20,8 +20,8 @@ export const EMPTY_OVERRIDES: Overrides = { format: null, rules: {}, scoring: {}
  * The one place league settings get edited, shared by setup and the dashboard.
  *
  * Two classes of value live here and they behave differently, which the UI
- * says out loud: rules only reach the analyst's context, while scoring weights
- * are the ranking in a points league — so editing one re-scores the board.
+ * says out loud: rules only reach the analyst's context, while supported
+ * scoring weights feed the points calculation. Unsupported values stay visible.
  */
 export function LeagueRulesEditor({
   format,
@@ -49,6 +49,7 @@ export function LeagueRulesEditor({
     overrides.format !== null ||
     Object.keys(overrides.rules).length > 0 ||
     Object.keys(overrides.scoring).length > 0;
+  const supportedScoringCount = scoring.filter((stat) => stat.supported).length;
 
   function setRule(key: string, raw: string, kind: LeagueSetting["kind"]) {
     const next = { ...overrides.rules };
@@ -58,6 +59,7 @@ export function LeagueRulesEditor({
   }
 
   function setScore(key: string, raw: string) {
+    if (!scoring.some((stat) => stat.key === key && stat.supported)) return;
     const next = { ...overrides.scoring };
     if (raw === "") delete next[key];
     else next[key] = Number(raw);
@@ -163,32 +165,50 @@ export function LeagueRulesEditor({
               This league publishes no per-stat point values.
             </p>
           ) : (
-            <ul className="mt-5 divide-y divide-edge overflow-hidden rounded-lg border border-edge">
-              {scoring.map((s) => (
-                <li key={s.key} className="flex items-center gap-3 bg-panel px-4 py-2.5">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm">
-                      {s.label}
-                      {s.edited && <span className="ml-2 text-[0.65rem] text-orange">edited</span>}
-                    </p>
-                    <p className="text-[0.7rem] text-muted">{s.key}</p>
-                  </div>
-                  <input
-                    type="number"
-                    step="0.1"
-                    disabled={busy}
-                    value={overrides.scoring[s.key] ?? s.value}
-                    onChange={(e) => setScore(s.key, e.target.value)}
-                    className="nums w-24 rounded-md border border-edge bg-card px-2.5 py-1.5 text-right text-sm focus:border-teal focus:outline-none disabled:opacity-40"
-                  />
-                </li>
-              ))}
-            </ul>
+            <>
+              <p className="mt-5 text-xs leading-relaxed text-muted">
+                <span className="font-medium text-ink">
+                  {supportedScoringCount} of {scoring.length}
+                </span>{" "}
+                imported scoring rules are used in CourtIQ&apos;s points calculation.
+              </p>
+              <ul className="mt-3 divide-y divide-edge overflow-hidden rounded-lg border border-edge">
+                {scoring.map((s) => (
+                  <li key={s.key} className="flex items-center gap-3 bg-panel px-4 py-2.5">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm">
+                        {s.label}
+                        {s.edited && (
+                          <span className="ml-2 text-[0.65rem] text-orange">edited</span>
+                        )}
+                        {!s.supported && (
+                          <span className="ml-2 text-[0.65rem] text-muted">excluded</span>
+                        )}
+                      </p>
+                      <p className="text-[0.7rem] text-muted">
+                        {s.key}
+                        {!s.supported && " · Imported from Sleeper, not used in rankings"}
+                      </p>
+                    </div>
+                    <input
+                      aria-label={s.label}
+                      type="number"
+                      step="0.1"
+                      disabled={busy || !s.supported}
+                      title={!s.supported ? "Excluded from CourtIQ rankings" : undefined}
+                      value={overrides.scoring[s.key] ?? s.value}
+                      onChange={(e) => setScore(s.key, e.target.value)}
+                      className="nums w-24 rounded-md border border-edge bg-card px-2.5 py-1.5 text-right text-sm focus:border-teal focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
+                    />
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
 
           <p className="mt-3 text-xs leading-relaxed text-muted">
-            In a points league these <em>are</em> the ranking — changing one re-scores every
-            board.
+            Supported values are used in points-league rankings. Excluded values stay visible
+            for transparency but are not part of the calculation.
           </p>
         </>
       )}

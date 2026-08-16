@@ -2,59 +2,43 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { saveSession } from "@/lib/types";
-
-const DEMO_SESSION = {
-  leagueId: "demo",
-  userId: "demo-user",
-  confirmedFormat: "category" as const,
-  ruleOverrides: {},
-  scoringOverrides: {},
-  league: {
-    leagueId: "demo",
-    name: "CourtIQ Demo League",
-    season: "2024",
-    sport: "nba",
-    sportLabel: "NBA",
-    statsSeason: "2024",
-    currentWeek: 18,
-    teamCount: 12,
-    format: "category" as const,
-    formatInferred: false,
-    supportsCategories: true,
-    rosterSize: 13,
-    userTeamId: 1,
-    rosteredCount: 156,
-    scoredCount: 148,
-  },
-  settings: [
-    { key: "playoff_week_start", label: "Playoffs start", value: "Week 22", raw: 22, kind: "week" as const },
-    { key: "trade_deadline", label: "Trade deadline", value: "Week 18", raw: 18, kind: "week" as const },
-    { key: "waiver_type", label: "Waiver type", value: "FAAB", raw: 2, kind: "enum" as const },
-  ],
-  scoring: [
-    { key: "pts", label: "Points", value: 1 },
-    { key: "reb", label: "Rebounds", value: 1 },
-    { key: "ast", label: "Assists", value: 1 },
-    { key: "stl", label: "Steals", value: 2 },
-    { key: "blk", label: "Blocks", value: 2 },
-    { key: "tov", label: "Turnovers", value: -1 },
-    { key: "fg_pct", label: "FG%", value: 1 },
-    { key: "ft_pct", label: "FT%", value: 1 },
-  ],
-  teams: [
-    { rosterId: 1, teamName: "Your Team", ownerName: "You", playerCount: 13, isUserTeam: true },
-    { rosterId: 2, teamName: "Hoop Dreams", ownerName: "Alex", playerCount: 13, isUserTeam: false },
-    { rosterId: 3, teamName: "Ball Hogs", ownerName: "Jordan", playerCount: 13, isUserTeam: false },
-  ],
-};
+import { saveSession, type Snapshot } from "@/lib/types";
+import { useState } from "react";
 
 export default function Landing() {
   const router = useRouter();
+  const [demoBusy, setDemoBusy] = useState(false);
+  const [demoError, setDemoError] = useState<string | null>(null);
 
-  function loadDemo() {
-    saveSession(DEMO_SESSION);
-    router.push("/app");
+  async function loadDemo() {
+    if (demoBusy) return;
+    setDemoBusy(true);
+    setDemoError(null);
+    try {
+      const response = await fetch("/api/snapshot", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ leagueId: "demo", userId: "demo-user" }),
+      });
+      const snapshot = (await response.json()) as Snapshot & { error?: string };
+      if (!response.ok) throw new Error(snapshot.error ?? "Could not load the demo.");
+
+      saveSession({
+        leagueId: snapshot.league.leagueId,
+        userId: "demo-user",
+        league: snapshot.league,
+        settings: snapshot.settings,
+        scoring: snapshot.scoring,
+        teams: snapshot.teams,
+        confirmedFormat: snapshot.league.format,
+        ruleOverrides: {},
+        scoringOverrides: {},
+      });
+      router.push("/app");
+    } catch (error) {
+      setDemoError(error instanceof Error ? error.message : "Could not load the demo.");
+      setDemoBusy(false);
+    }
   }
 
   return (
@@ -85,7 +69,7 @@ export default function Landing() {
         <div className="flex flex-1 flex-col justify-center py-12">
           <p className="mb-6 inline-flex w-fit items-center gap-2 rounded-full border border-edge bg-panel px-3 py-1.5 text-xs uppercase tracking-[0.15em] text-muted">
             <span className="h-1.5 w-1.5 rounded-full bg-teal" />
-            Live Sleeper league data
+            Public Sleeper league data
           </p>
 
           <h1 className="font-display text-[clamp(2.75rem,9vw,6.5rem)] font-bold uppercase leading-[0.92] tracking-tight">
@@ -95,9 +79,10 @@ export default function Landing() {
           </h1>
 
           <p className="mt-8 max-w-xl text-lg leading-relaxed text-muted">
-            Most fantasy advice ignores how your league actually scores. CourtIQ reads your
-            Sleeper league, scoring format, playoff dates, trade deadline, and waiver rules,
-            then ranks every pickup and trade against them. And it tells you exactly why.
+            Most fantasy advice ignores how your league actually scores. CourtIQ imports your
+            Sleeper NBA league, filters out players already rostered, and ranks available players
+            with your supported scoring values. It also shows the deterministic logic behind a
+            one-for-one trade candidate.
           </p>
 
           {/* Sample analyst callout */}
@@ -106,13 +91,12 @@ export default function Landing() {
               Sample insight
             </p>
             <p className="text-base leading-relaxed text-ink">
-              <span className="font-semibold text-orange">Anthony Davis</span> is your
-              highest-value pickup this week. Your league rewards blocks heavily and your two
-              weakest categories right now are points and rebounds. He covers both, and he
-              has four home games this week.
+              <span className="font-semibold text-orange">A category specialist</span> can rank
+              very differently from a high-volume scorer when the league format changes. CourtIQ
+              makes that scoring difference visible.
             </p>
             <p className="mt-4 text-xs text-muted">
-              CourtIQ reads this from your actual league rules, not a generic ranking.
+              CourtIQ uses the imported scoring setup, not a generic ranking.
             </p>
           </div>
 
@@ -123,18 +107,24 @@ export default function Landing() {
             >
               Import your league
               <span aria-hidden className="transition-transform group-hover:translate-x-1">
-                →
+                -&gt;
               </span>
             </Link>
             <button
               onClick={loadDemo}
+              disabled={demoBusy}
               className="inline-flex items-center gap-2 rounded-lg border border-edge bg-panel px-7 py-4 font-display text-lg font-semibold uppercase tracking-wide text-ink transition hover:border-teal/60"
             >
-              Try a demo
+              {demoBusy ? "Loading demo..." : "Try a demo"}
             </button>
           </div>
+          {demoError && (
+            <p role="alert" className="mt-3 text-sm text-red">
+              {demoError}
+            </p>
+          )}
           <span className="mt-3 text-sm text-muted">
-            No login. No API key. Takes ten seconds.
+            No Sleeper login required. Ollama Cloud narration is optional.
           </span>
         </div>
 
@@ -142,11 +132,11 @@ export default function Landing() {
           {[
             {
               title: "Scored for your league",
-              body: "CourtIQ reads your league's actual scoring rules from Sleeper and ranks every player against them, not a generic template.",
+              body: "CourtIQ ranks active, fantasy-relevant NBA players using supported point values or its category model - not a generic template.",
             },
             {
               title: "Trade recommendations that make sense",
-              body: "Trades are found by looking at what your roster actually needs, so the reasoning is always explainable.",
+              body: "Trades are deterministic one-for-one candidates based on positional group depth and comparable computed value.",
             },
             {
               title: "An analyst with opinions",

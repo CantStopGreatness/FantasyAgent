@@ -40,7 +40,7 @@ function parseRuleOverrides(value: unknown): Record<string, number | string> {
   return out;
 }
 
-/** Scoring corrections must be finite numbers — they go straight into the math. */
+/** Scoring corrections must be finite; the sport contract gates them before scoring. */
 function parseScoringOverrides(value: unknown): Record<string, number> {
   if (!value || typeof value !== "object") return {};
   const out: Record<string, number> = {};

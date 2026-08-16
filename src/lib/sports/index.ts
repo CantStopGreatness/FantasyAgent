@@ -5,11 +5,8 @@ export * from "./types";
 export { nbaProfile };
 
 /**
- * Sports CourtIQ can actually score today.
- *
- * Sleeper serves player and stat data for nfl, nhl, mlb and others, so adding
- * one is a profile file plus a `toRates` mapping — not a rewrite. Until a
- * profile exists here, importing that league is refused rather than guessed at.
+ * Sports CourtIQ can actually score today. Imported leagues without a profile
+ * are refused rather than guessed at.
  */
 export const SPORT_PROFILES: Partial<Record<SportId, SportProfile>> = {
   nba: nbaProfile,

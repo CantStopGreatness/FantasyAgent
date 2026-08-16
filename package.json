@@ -8,10 +8,12 @@
     "start": "next start",
     "lint": "eslint",
     "verify": "tsx scripts/verify-engine.ts",
-    "verify:league": "tsx scripts/verify-league.ts"
+    "verify:league": "tsx scripts/verify-league.ts",
+    "verify:scoring": "tsx scripts/verify-scoring-support.ts",
+    "verify:reliability": "tsx --conditions=react-server scripts/verify-reliability.ts",
+    "verify:demo": "tsx scripts/verify-demo.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.117.1",
     "next": "16.3.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",

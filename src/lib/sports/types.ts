@@ -75,3 +75,34 @@ export function rateOf(rates: PlayerRates, key: string): number {
   const v = rates[key];
   return typeof v === "number" && isFinite(v) ? v : 0;
 }
+
+/**
+ * Turn every numeric stat Sleeper reports into a per-game rate.
+ *
+ * Enumerating the stats we expect is how a points league silently loses
+ * points: a real league scores double-doubles, triple-doubles, technicals and
+ * 40-point bonuses, and any key the profile forgot is scored as zero rather
+ * than flagged. Passing everything through means whatever a league puts in its
+ * scoring_settings resolves against a real number — and a new sport's keys
+ * work without touching this file.
+ *
+ * `gp` is the divisor and `sp` is seconds of playing time, so both are handled
+ * by the caller rather than divided blindly.
+ */
+export function perGameRates(playerId: string, line: SleeperStatLine): PlayerRates | null {
+  const gp = typeof line.gp === "number" && isFinite(line.gp) ? line.gp : 0;
+  if (gp <= 0) return null;
+
+  const rates: PlayerRates = {
+    playerId,
+    gp,
+    mpg: (typeof line.sp === "number" ? line.sp : 0) / 60 / gp,
+  };
+
+  for (const [key, value] of Object.entries(line)) {
+    if (key === "gp" || key === "sp") continue;
+    if (typeof value !== "number" || !isFinite(value)) continue;
+    rates[key] = value / gp;
+  }
+  return rates;
+}

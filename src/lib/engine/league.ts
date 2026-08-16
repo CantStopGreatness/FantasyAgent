@@ -79,10 +79,14 @@ async function resolveSeasonContext(
 
 function teamNameFor(
   ownerId: string | null,
+  rosterId: number,
   users: { user_id: string; display_name: string; metadata: { team_name?: string } | null }[],
 ): { teamName: string; ownerName: string } {
   const user = users.find((u) => u.user_id === ownerId);
-  if (!user) return { teamName: "Orphan Team", ownerName: "Unmanaged" };
+  // Rosters without a manager are common in test and partially-filled leagues.
+  // Number them so a team picker stays usable instead of listing seven
+  // identical entries.
+  if (!user) return { teamName: `Team ${rosterId}`, ownerName: "No manager" };
   return {
     teamName: user.metadata?.team_name?.trim() || user.display_name,
     ownerName: user.display_name,
@@ -114,7 +118,7 @@ export async function buildSnapshot(
   const [rosters, users] = await Promise.all([getRosters(leagueId), getLeagueUsers(leagueId)]);
 
   const teams: LeagueTeam[] = rosters.map((r) => {
-    const { teamName, ownerName } = teamNameFor(r.owner_id, users);
+    const { teamName, ownerName } = teamNameFor(r.owner_id, r.roster_id, users);
     return {
       rosterId: r.roster_id,
       ownerId: r.owner_id,

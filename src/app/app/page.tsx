@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { Icon } from "@/components/Icon";
 import { LeagueBadge } from "@/components/LeagueBadge";
 import { PersonaCallout } from "@/components/PersonaCallout";
 import { HeroCard, PlayerList } from "@/components/PlayerCards";
@@ -37,11 +38,23 @@ export default function Dashboard() {
     tab === "team" ? "roster" : tab === "sleepers" ? "sleepers" : "waivers";
   const board = boards[activeView] ?? null;
 
+  // `/app?demo=1` opens the sample league directly, so the dashboard can be
+  // linked to and shown without walking the import flow first.
+  useEffect(() => {
+    if (session || typeof window === "undefined") return;
+    if (!new URLSearchParams(window.location.search).has("demo")) return;
+    void import("@/lib/demo-session").then(({ DEMO_SESSION }) => {
+      saveSession(DEMO_SESSION);
+      window.dispatchEvent(new StorageEvent("storage", { key: "courtiq.session" }));
+    });
+  }, [session]);
+
   // A visitor without an imported league belongs on /setup. useSession reports
   // null on the first hydration pass too, so wait a tick before deciding.
   const [checkedStorage, setCheckedStorage] = useState(false);
   useEffect(() => {
     if (session) return;
+    if (typeof window !== "undefined" && window.location.search.includes("demo")) return;
     const id = setTimeout(() => setCheckedStorage(true), 0);
     return () => clearTimeout(id);
   }, [session]);
@@ -160,8 +173,8 @@ export default function Dashboard() {
 
   if (!session) {
     return (
-      <main className="grid min-h-dvh place-items-center">
-        <p className="text-muted">Loading your league…</p>
+      <main className="turf grid min-h-dvh place-items-center">
+        <p className="font-display text-bone">Loading your league…</p>
       </main>
     );
   }
@@ -169,19 +182,17 @@ export default function Dashboard() {
   const { league } = session;
 
   return (
-    <main className="min-h-dvh">
-      {/* Slim top bar — league settings live here as a badge, not a sidebar. */}
-      <header className="sticky top-0 z-20 border-b border-edge bg-bg/90 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-4 gap-y-3 px-6 py-4">
-          <Link href="/" className="font-display text-xl font-bold tracking-wide">
-            COURT<span className="text-orange">IQ</span>
+    <main className="turf min-h-dvh pb-16">
+      {/* The scoreboard: league identity and rules, stamped across the top. */}
+      <header className="strip sticky top-0 z-20 border-b-[3px] border-ink">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-4 gap-y-3 px-5 py-3 sm:px-6">
+          <Link href="/" className="font-display text-xl text-bone">
+            COURT<span className="text-gold">IQ</span>
           </Link>
 
-          <span aria-hidden className="hidden h-5 w-px bg-edge sm:block" />
-
           <div className="min-w-0 flex-1">
-            <p className="truncate font-medium leading-tight">{league.name}</p>
-            <p className="text-xs text-muted">
+            <p className="truncate font-display text-sm leading-tight">{league.name}</p>
+            <p className="nums text-xs text-bone-3">
               {league.teamCount} teams · {league.statsSeason} stats
             </p>
           </div>
@@ -193,22 +204,23 @@ export default function Dashboard() {
               clearSession();
               router.push("/setup");
             }}
-            className="text-xs text-muted underline-offset-4 hover:text-ink hover:underline"
+            className="text-xs text-bone-3 underline-offset-4 hover:text-gold hover:underline"
           >
             Switch league
           </button>
         </div>
 
-        <nav className="mx-auto max-w-5xl px-6">
-          <ul className="-mb-px flex gap-1 overflow-x-auto">
+        <nav className="mx-auto max-w-5xl px-5 sm:px-6">
+          <ul className="flex gap-0 overflow-x-auto">
             {TABS.map((t) => (
               <li key={t.id}>
                 <button
                   onClick={() => setTab(t.id)}
-                  className={`whitespace-nowrap border-b-2 px-4 py-3 font-display text-sm font-semibold uppercase tracking-wide transition ${
+                  aria-current={tab === t.id ? "page" : undefined}
+                  className={`whitespace-nowrap border-x-[3px] border-t-[3px] px-4 py-2.5 font-display text-sm transition ${
                     tab === t.id
-                      ? "border-orange text-ink"
-                      : "border-transparent text-muted hover:text-ink"
+                      ? "border-ink bg-bone text-ink"
+                      : "border-transparent text-bone-3 hover:text-gold"
                   }`}
                 >
                   {t.label}
@@ -219,9 +231,13 @@ export default function Dashboard() {
         </nav>
       </header>
 
-      <div className="mx-auto max-w-5xl px-6 py-10">
+      <div className="mx-auto max-w-5xl px-5 py-8 sm:px-6">
         {error && (
-          <div role="alert" className="rounded-xl border border-red/40 bg-red/10 px-6 py-5 text-sm">
+          <div
+            role="alert"
+            className="card mb-6 flex items-start gap-3 border-whistle bg-whistle px-5 py-4 text-sm text-bone"
+          >
+            <Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0" />
             {error}
           </div>
         )}
@@ -275,9 +291,9 @@ function BoardView({
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="font-display text-3xl font-bold uppercase tracking-tight">{heading}</h1>
-        <p className="mt-1.5 text-sm text-muted">{blurb}</p>
+      <div className="on-field">
+        <h1 className="font-display text-3xl text-chalk sm:text-4xl">{heading}</h1>
+        <p className="mt-1.5 text-sm text-bone-2">{blurb}</p>
       </div>
 
       {loading && !board ? (
@@ -307,7 +323,7 @@ function BoardView({
           />
 
           {board.unscored ? (
-            <p className="text-xs text-muted">
+            <p className="text-xs text-bone-2">
               {board.unscored} player{board.unscored === 1 ? "" : "s"} on this roster had no
               scoreable stats for {league.statsSeason} and{" "}
               {board.unscored === 1 ? "is" : "are"} not listed.
@@ -321,12 +337,12 @@ function BoardView({
 
 function BoardSkeleton() {
   return (
-    <div className="space-y-8" aria-hidden>
-      <div className="h-28 animate-pulse rounded-xl border border-edge bg-panel" />
-      <div className="h-36 animate-pulse rounded-xl border border-edge bg-card" />
-      <div className="space-y-px overflow-hidden rounded-xl border border-edge">
+    <div className="space-y-6" aria-hidden>
+      <div className="card h-24 animate-pulse bg-bone-2" />
+      <div className="card h-36 animate-pulse bg-bone-2" />
+      <div className="card overflow-hidden">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="h-16 animate-pulse bg-panel" />
+          <div key={i} className="h-14 animate-pulse odd:bg-bone even:bg-bone-2" />
         ))}
       </div>
     </div>
@@ -335,9 +351,9 @@ function BoardSkeleton() {
 
 export function EmptyState({ title, body }: { title: string; body: string }) {
   return (
-    <div className="rounded-xl border border-dashed border-edge px-8 py-14 text-center">
-      <h2 className="font-display text-xl font-semibold uppercase tracking-wide">{title}</h2>
-      <p className="mx-auto mt-2.5 max-w-md text-sm leading-relaxed text-muted">{body}</p>
+    <div className="card px-8 py-14 text-center">
+      <h2 className="font-display text-xl">{title}</h2>
+      <p className="mx-auto mt-2.5 max-w-md text-sm leading-relaxed text-ink-2">{body}</p>
     </div>
   );
 }

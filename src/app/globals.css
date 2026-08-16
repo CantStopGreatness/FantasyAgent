@@ -1,67 +1,140 @@
 @import "tailwindcss";
 
-/* ── CourtIQ design tokens ─────────────────────────────────────────────── */
+/* ── CourtIQ: turf-and-sideline ────────────────────────────────────────────
+ * A retro sports-sim world. The ground is a playing surface; every panel is a
+ * sideline card printed on bone stock and hard-ruled in ink. Flat colour does
+ * all the work — no gradients, no glass, no soft elevation. Depth comes from
+ * ruling and from stacking flat planes, the way a printed stat sheet does.
+ */
 :root {
-  --bg: #0d1117;
-  --panel: #161b22;
-  --card: #1c232d;
-  --border: #2a3341;
-  --text: #f0f3f6;
-  --muted: #8b96a5;
-  --orange: #ff6b35;
-  --teal: #00c2d1;
-  --green: #2ecc71;
-  --red: #e6484f;
+  /* The field itself */
+  --field: #1b7a48;
+  --field-deep: #10502f;
+  --field-line: #2f9a61;
+
+  /* Printed stock */
+  --bone: #f4eddd;
+  --bone-2: #e7dcc4;
+  --bone-3: #d8cbaf;
+
+  /* Ink */
+  --ink: #14201a;
+  --ink-2: #4d5f54;
+  --chalk: #ffffff;
+
+  /* Signals */
+  --flag: #e4572e;
+  --gold: #f0b429;
+  --whistle: #c0182f;
+  --gain: #1b7a48;
+
+  --rule: 3px;
 }
 
 @theme inline {
-  --color-bg: var(--bg);
-  --color-panel: var(--panel);
-  --color-card: var(--card);
-  --color-edge: var(--border);
-  --color-ink: var(--text);
-  --color-muted: var(--muted);
-  --color-orange: var(--orange);
-  --color-teal: var(--teal);
-  --color-green: var(--green);
-  --color-red: var(--red);
+  --color-field: var(--field);
+  --color-field-deep: var(--field-deep);
+  --color-field-line: var(--field-line);
+  --color-bone: var(--bone);
+  --color-bone-2: var(--bone-2);
+  --color-bone-3: var(--bone-3);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-chalk: var(--chalk);
+  --color-flag: var(--flag);
+  --color-gold: var(--gold);
+  --color-whistle: var(--whistle);
+  --color-gain: var(--gain);
 
-  --font-display: var(--font-barlow), ui-sans-serif, system-ui, sans-serif;
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-archivo-black), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
 }
 
-/* CourtIQ is a committed dark-surface product — no light variant. */
+/* A daylight surface: this is a field in the sun, not a broadcast booth. */
 html {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--font-sans);
+  background: var(--field);
+  color: var(--ink);
+  /* Same reason as .font-display below: `@theme inline` does not publish
+     --font-sans as a custom property, so point at the real font variable. */
+  font-family: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
-/* Display face: condensed, tight, uppercase-friendly. */
-.font-display {
-  font-family: var(--font-display);
-  letter-spacing: 0.01em;
+/* Yard lines. Fixed so the field reads as ground the content sits on top of,
+   rather than a texture that scrolls with the panels. */
+.turf {
+  background-color: var(--field);
+  background-image: repeating-linear-gradient(
+    90deg,
+    transparent 0,
+    transparent 5.5rem,
+    color-mix(in oklab, var(--field-line) 55%, transparent) 5.5rem,
+    color-mix(in oklab, var(--field-line) 55%, transparent) calc(5.5rem + 2px)
+  );
+  background-attachment: fixed;
 }
 
-/* Tabular figures keep score columns from shifting as values change. */
+/* Reference the next/font variable directly. `@theme inline` substitutes its
+   values into generated utilities and never emits --font-display as a real
+   custom property, so pointing at that name here resolves to nothing and the
+   display face silently degrades to inherited body text. */
+.font-display {
+  font-family: var(--font-archivo-black), ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+/* Scores and ranks sit in columns; tabular figures keep them from dancing. */
 .nums {
   font-variant-numeric: tabular-nums;
 }
 
-::selection {
-  background: color-mix(in oklab, var(--orange) 35%, transparent);
+/* The world's one primitive: bone stock, hard-ruled. */
+.card {
+  background: var(--bone);
+  border: var(--rule) solid var(--ink);
 }
 
-/* Focus ring — visible on the dark ground without being loud. */
+/* A scoreboard strip — ink ground, chalk lettering. */
+.strip {
+  background: var(--ink);
+  color: var(--bone);
+}
+
+::selection {
+  background: var(--gold);
+  color: var(--ink);
+}
+
 :where(a, button, input, select, [tabindex]):focus-visible {
-  outline: 2px solid var(--teal);
+  outline: var(--rule) solid var(--ink);
   outline-offset: 2px;
-  border-radius: 4px;
+}
+
+.strip :where(a, button, select):focus-visible,
+.on-field :where(a, button, select):focus-visible {
+  outline-color: var(--gold);
+}
+
+/* The one authored moment: cards deal in like they are being laid on a table.
+   Exponential ease-out, from an already-visible default so nothing depends on
+   JS or the animation running at all. */
+@keyframes deal {
+  from {
+    transform: translateY(10px);
+    opacity: 0.4;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.deal {
+  animation: deal 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 @media (prefers-reduced-motion: reduce) {

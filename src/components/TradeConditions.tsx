@@ -52,30 +52,30 @@ export function TradeConditions({
   }
 
   return (
-    <section className="rounded-xl border border-edge bg-panel p-5">
+    <section className="card p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="font-display text-sm font-semibold uppercase tracking-[0.12em]">
+        <h3 className="font-display text-sm ">
           What are you after?
         </h3>
         {activeCount > 0 && (
           <button
-            type="button"
+              type="button"
             disabled={disabled}
             onClick={() =>
               onChange({ wantCategories: [], targetPlayerId: null, protectedPlayerIds: [] })
             }
-            className="text-xs text-muted underline-offset-4 hover:text-ink hover:underline disabled:opacity-40"
+            className="text-xs text-ink-2 underline-offset-4 hover:text-ink hover:underline disabled:opacity-40"
           >
             Clear all
           </button>
         )}
       </div>
-      <p className="mt-1 text-xs text-muted">
+      <p className="mt-1 text-xs text-ink-2">
         Optional. Leave it blank and CourtIQ just finds the best imbalance to exploit.
       </p>
 
       {/* Goal categories */}
-      <p className="mt-5 text-xs uppercase tracking-[0.12em] text-muted">I want more…</p>
+      <p className="mt-5 text-xs  text-ink-2">I want more…</p>
       <div className="mt-2.5 flex flex-wrap gap-2">
         {NBA_CATEGORY_CHOICES.map((c) => {
           const on = intent.wantCategories.includes(c.key);
@@ -86,10 +86,10 @@ export function TradeConditions({
               disabled={disabled}
               onClick={() => toggleCategory(c.key)}
               aria-pressed={on}
-              className={`rounded-full border px-3 py-1.5 text-xs font-medium transition disabled:opacity-40 ${
+              className={`border px-3 py-1.5 text-xs font-medium transition disabled:opacity-40 ${
                 on
-                  ? "border-teal bg-teal/15 text-teal"
-                  : "border-edge text-muted hover:border-muted/50 hover:text-ink"
+                  ? "border-ink bg-gold text-ink"
+                  : "border-ink text-ink-2 hover:text-ink"
               }`}
             >
               {c.label}
@@ -99,15 +99,15 @@ export function TradeConditions({
       </div>
 
       {/* Target player */}
-      <p className="mt-6 text-xs uppercase tracking-[0.12em] text-muted">
+      <p className="mt-6 text-xs  text-ink-2">
         Someone specific on {partnerTeamName}?
       </p>
       <select
-        aria-label="Target player"
+              aria-label="Target player"
         disabled={disabled}
         value={intent.targetPlayerId ?? ""}
         onChange={(e) => onChange({ ...intent, targetPlayerId: e.target.value || null })}
-        className="mt-2.5 w-full rounded-lg border border-edge bg-card px-3 py-2.5 text-sm focus:border-teal focus:outline-none disabled:opacity-40"
+        className="mt-2.5 w-full border-[3px] border-ink bg-bone-2 px-3 py-2.5 text-sm focus:bg-chalk focus:outline-none disabled:opacity-40"
       >
         <option value="">No preference — find the best fit</option>
         {partnerRoster.map((p) => (
@@ -120,7 +120,7 @@ export function TradeConditions({
       {/* Untouchables */}
       {myRoster.length > 0 && (
         <>
-          <p className="mt-6 text-xs uppercase tracking-[0.12em] text-muted">
+          <p className="mt-6 text-xs  text-ink-2">
             Off the table {intent.protectedPlayerIds.length > 0 && `(${intent.protectedPlayerIds.length})`}
           </p>
           <div className="mt-2.5 flex flex-wrap gap-2">
@@ -129,14 +129,14 @@ export function TradeConditions({
               return (
                 <button
                   key={p.playerId}
-                  type="button"
+              type="button"
                   disabled={disabled}
                   onClick={() => toggleProtected(p.playerId)}
                   aria-pressed={on}
-                  className={`rounded-full border px-3 py-1.5 text-xs transition disabled:opacity-40 ${
+                  className={`border px-3 py-1.5 text-xs transition disabled:opacity-40 ${
                     on
-                      ? "border-red/50 bg-red/10 text-red line-through"
-                      : "border-edge text-muted hover:border-muted/50 hover:text-ink"
+                      ? "border-whistle bg-whistle text-bone line-through"
+                      : "border-ink text-ink-2 hover:text-ink"
                   }`}
                 >
                   {p.name}
@@ -144,7 +144,7 @@ export function TradeConditions({
               );
             })}
           </div>
-          <p className="mt-2 text-[0.7rem] text-muted">
+          <p className="mt-2 text-[0.7rem] text-ink-2">
             Your best player is never offered, protected or not.
           </p>
         </>

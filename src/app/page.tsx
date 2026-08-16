@@ -2,9 +2,19 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { saveSession, type Snapshot } from "@/lib/types";
 import { useState } from "react";
+import { Icon } from "@/components/Icon";
+import { SportsReel } from "@/components/PixelScenes";
+import { ProofDeck } from "@/components/ProofDeck";
+import { loadDemoSession } from "@/lib/demo-session";
+import { saveSession } from "@/lib/types";
 
+/**
+ * The opening argument.
+ *
+ * A stat sheet sits in the first viewport rather than a screenshot or a
+ * feature grid: CourtIQ's central claim is that league rules change the answer.
+ */
 export default function Landing() {
   const router = useRouter();
   const [demoBusy, setDemoBusy] = useState(false);
@@ -15,25 +25,7 @@ export default function Landing() {
     setDemoBusy(true);
     setDemoError(null);
     try {
-      const response = await fetch("/api/snapshot", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ leagueId: "demo", userId: "demo-user" }),
-      });
-      const snapshot = (await response.json()) as Snapshot & { error?: string };
-      if (!response.ok) throw new Error(snapshot.error ?? "Could not load the demo.");
-
-      saveSession({
-        leagueId: snapshot.league.leagueId,
-        userId: "demo-user",
-        league: snapshot.league,
-        settings: snapshot.settings,
-        scoring: snapshot.scoring,
-        teams: snapshot.teams,
-        confirmedFormat: snapshot.league.format,
-        ruleOverrides: {},
-        scoringOverrides: {},
-      });
+      saveSession(await loadDemoSession());
       router.push("/app");
     } catch (error) {
       setDemoError(error instanceof Error ? error.message : "Could not load the demo.");
@@ -42,120 +34,153 @@ export default function Landing() {
   }
 
   return (
-    <main className="relative min-h-dvh overflow-hidden">
-      {/* Court geometry */}
-      <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -right-[18rem] -top-[16rem] h-[46rem] w-[46rem] rounded-full border border-edge/60" />
-        <div className="absolute -right-[10rem] -top-[8rem] h-[30rem] w-[30rem] rounded-full border border-edge/40" />
-        <div
-          className="absolute inset-0"
-          style={{
-            background:
-              "radial-gradient(80rem 40rem at 78% -10%, rgba(255,107,53,0.10), transparent 60%), radial-gradient(60rem 40rem at 8% 110%, rgba(0,194,209,0.08), transparent 60%)",
-          }}
-        />
-      </div>
-
-      <div className="relative mx-auto flex min-h-dvh max-w-6xl flex-col px-6 sm:px-10">
-        <header className="flex items-center justify-between py-8">
-          <span className="font-display text-2xl font-bold tracking-wide">
-            COURT<span className="text-orange">IQ</span>
+    <main className="turf min-h-dvh">
+      <div className="mx-auto max-w-6xl px-5 py-6 sm:px-8">
+        <header className="on-field flex items-center justify-between gap-4">
+          <span className="font-display text-2xl text-chalk">
+            COURT<span className="text-gold">IQ</span>
           </span>
-          <span className="hidden text-xs uppercase tracking-[0.2em] text-muted sm:block">
-            Fantasy League Intelligence
-          </span>
+          <button
+            type="button"
+            onClick={loadDemo}
+            disabled={demoBusy}
+            className="border-[3px] border-ink bg-bone px-4 py-2 font-display text-sm text-ink transition hover:bg-gold disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {demoBusy ? "Loading sample..." : "See a sample league"}
+          </button>
         </header>
 
-        <div className="flex flex-1 flex-col justify-center py-12">
-          <p className="mb-6 inline-flex w-fit items-center gap-2 rounded-full border border-edge bg-panel px-3 py-1.5 text-xs uppercase tracking-[0.15em] text-muted">
-            <span className="h-1.5 w-1.5 rounded-full bg-teal" />
-            Public Sleeper league data
-          </p>
+        <div className="mt-12 grid grid-cols-[minmax(0,1fr)] items-start gap-8 lg:mt-16 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:gap-12">
+          <div className="on-field">
+            <h1 className="font-display text-[clamp(2.8rem,8vw,5.5rem)] leading-[0.88] text-chalk">
+              <TypeLine text="YOUR" start={0.1} />
+              <TypeLine text="LEAGUE" start={0.32} />
+              <TypeLine text="DOESN'T" start={0.63} />
+              <TypeLine text="PLAY BY" start={0.98} />
+              <TypeLine text="GENERIC" start={1.33} className="text-gold" />
+              <TypeLine text="RULES." start={1.68} className="text-gold" caret />
+            </h1>
 
-          <h1 className="font-display text-[clamp(2.75rem,9vw,6.5rem)] font-bold uppercase leading-[0.92] tracking-tight">
-            Your league doesn&apos;t play
-            <br />
-            <span className="text-orange">by generic rules.</span>
-          </h1>
-
-          <p className="mt-8 max-w-xl text-lg leading-relaxed text-muted">
-            Most fantasy advice ignores how your league actually scores. CourtIQ imports your
-            Sleeper NBA league, filters out players already rostered, and ranks available players
-            with your supported scoring values. It also shows the deterministic logic behind a
-            one-for-one trade candidate.
-          </p>
-
-          {/* Sample analyst callout */}
-          <div className="mt-10 max-w-xl rounded-xl border border-edge bg-panel px-6 py-5">
-            <p className="mb-3 text-xs uppercase tracking-[0.15em] text-muted">
-              Sample insight
+            <p
+              className="after-type mt-7 max-w-[39ch] text-lg leading-relaxed text-bone"
+              style={{ animationDelay: "2.08s" }}
+            >
+              CourtIQ imports your Sleeper NBA league, applies its supported scoring values,
+              filters out rostered players, and calculates waiver, sleeper, and one-for-one
+              trade recommendations with a deterministic engine.
             </p>
-            <p className="text-base leading-relaxed text-ink">
-              <span className="font-semibold text-orange">A category specialist</span> can rank
-              very differently from a high-volume scorer when the league format changes. CourtIQ
-              makes that scoring difference visible.
-            </p>
-            <p className="mt-4 text-xs text-muted">
-              CourtIQ uses the imported scoring setup, not a generic ranking.
+
+            <div
+              className="after-type mt-9 flex flex-wrap items-center gap-3"
+              style={{ animationDelay: "2.28s" }}
+            >
+              <Link
+                href="/setup"
+                className="group inline-flex items-center gap-2.5 border-[3px] border-ink bg-flag px-7 py-4 font-display text-lg text-ink transition hover:bg-gold"
+              >
+                Import your league
+                <Icon
+                  name="arrow-right"
+                  className="h-4 w-4 transition-transform group-hover:translate-x-1"
+                />
+              </Link>
+              <button
+                type="button"
+                onClick={loadDemo}
+                disabled={demoBusy}
+                className="border-[3px] border-bone-3 px-7 py-4 font-display text-lg text-bone transition hover:border-gold hover:text-gold disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {demoBusy ? "Loading demo..." : "Try demo"}
+              </button>
+            </div>
+
+            {demoError && (
+              <p role="alert" className="after-type mt-3 max-w-md text-sm text-bone">
+                {demoError}
+              </p>
+            )}
+            <p className="after-type mt-3 text-sm text-bone-2">
+              No Sleeper login required. Ollama narration is optional and never decides a rank
+              or trade.
             </p>
           </div>
 
-          <div className="mt-12 flex flex-wrap items-center gap-4">
-            <Link
-              href="/setup"
-              className="group inline-flex items-center gap-3 rounded-lg bg-orange px-7 py-4 font-display text-lg font-semibold uppercase tracking-wide text-[#1a0d06] transition hover:brightness-110"
-            >
-              Import your league
-              <span aria-hidden className="transition-transform group-hover:translate-x-1">
-                -&gt;
-              </span>
-            </Link>
-            <button
-              onClick={loadDemo}
-              disabled={demoBusy}
-              className="inline-flex items-center gap-2 rounded-lg border border-edge bg-panel px-7 py-4 font-display text-lg font-semibold uppercase tracking-wide text-ink transition hover:border-teal/60"
-            >
-              {demoBusy ? "Loading demo..." : "Try a demo"}
-            </button>
+          <div>
+            <ProofDeck />
+            <SportsReel className="mt-6" />
           </div>
-          {demoError && (
-            <p role="alert" className="mt-3 text-sm text-red">
-              {demoError}
-            </p>
-          )}
-          <span className="mt-3 text-sm text-muted">
-            No Sleeper login required. Ollama Cloud narration is optional.
-          </span>
         </div>
 
-        <footer className="grid gap-px overflow-hidden rounded-xl border border-edge bg-edge sm:grid-cols-3">
-          {[
-            {
-              title: "Scored for your league",
-              body: "CourtIQ ranks active, fantasy-relevant NBA players using supported point values or its category model - not a generic template.",
-            },
-            {
-              title: "Trade recommendations that make sense",
-              body: "Trades are deterministic one-for-one candidates based on positional group depth and comparable computed value.",
-            },
-            {
-              title: "An analyst with opinions",
-              body: "Every recommendation comes with a plain-English read on why it matters right now, not just a stat table.",
-            },
-          ].map((f) => (
-            <div key={f.title} className="bg-panel px-6 py-7">
-              <h2 className="font-display text-lg font-semibold uppercase tracking-wide">
-                {f.title}
-              </h2>
-              <p className="mt-2 text-sm leading-relaxed text-muted">{f.body}</p>
-            </div>
-          ))}
-        </footer>
+        <Ledger />
 
-        <p className="py-8 text-center text-xs text-muted">
-          Data from the public Sleeper API
+        <p className="mt-10 pb-4 text-center text-xs text-bone-2">
+          Sleeper NBA leagues · Data from the public Sleeper API
         </p>
       </div>
     </main>
+  );
+}
+
+/**
+ * One visual line of the headline, revealed without mounting characters one
+ * at a time so it stays readable, copyable, and stable.
+ */
+function TypeLine({
+  text,
+  start,
+  className = "",
+  caret = false,
+}: {
+  text: string;
+  start: number;
+  className?: string;
+  caret?: boolean;
+}) {
+  const steps = text.length + (caret ? 1 : 0);
+
+  return (
+    <span
+      className={`type-line ${className}`}
+      style={{
+        animationDuration: `${steps * 45}ms`,
+        animationTimingFunction: `steps(${steps})`,
+        animationDelay: `${start}s`,
+      }}
+    >
+      {text}
+      {caret && <i className="caret" />}
+    </span>
+  );
+}
+
+/** Three product claims paired with the implementation that supports them. */
+function Ledger() {
+  const rows = [
+    {
+      k: "Uses your supported scoring",
+      v: "Imported point values with exact NBA player rates affect the calculation. Excluded values stay visible and do not pretend to work.",
+    },
+    {
+      k: "Shows the deterministic result",
+      v: "Waiver and sleeper boards remove rostered players and show the computed point total or category score behind each recommendation.",
+    },
+    {
+      k: "Trades on your terms",
+      v: "Set category goals, target an opponent's player, or protect your roster. The engine builds the candidate; optional narration only explains it.",
+    },
+  ];
+
+  return (
+    <dl className="card mt-12 divide-y-[3px] divide-ink">
+      {rows.map((row) => (
+        <div
+          key={row.k}
+          className="gap-2 px-5 py-4 sm:flex sm:items-baseline sm:gap-8 sm:px-6"
+        >
+          <dt className="shrink-0 font-display text-base sm:w-56">{row.k}</dt>
+          <dd className="mt-1 text-sm leading-relaxed text-ink-2 sm:mt-0">{row.v}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }

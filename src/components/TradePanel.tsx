@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Icon } from "./Icon";
 import { PersonaCallout } from "./PersonaCallout";
 import { PlayerList } from "./PlayerCards";
 import { TradeConditions } from "./TradeConditions";
@@ -14,10 +15,10 @@ import {
 } from "@/lib/types";
 
 const FAIRNESS_COPY: Record<string, { label: string; className: string }> = {
-  even: { label: "Even value", className: "text-green" },
-  "you-gain-value": { label: "Leans your way", className: "text-green" },
-  "you-give-up-value": { label: "You give up a little value", className: "text-orange" },
-  "worth-the-overpay": { label: "Overpay worth making", className: "text-teal" },
+  even: { label: "Even value", className: "text-gain" },
+  "you-gain-value": { label: "Leans your way", className: "text-gain" },
+  "you-give-up-value": { label: "You give up a little value", className: "text-flag" },
+  "worth-the-overpay": { label: "Overpay worth making", className: "text-ink" },
 };
 
 export function TradePanel({ session }: { session: Session }) {
@@ -56,6 +57,8 @@ export function TradePanel({ session }: { session: Session }) {
       const cached = rosterCache.current.get(key);
       if (cached) {
         setRoster(cached);
+        setRosterLoading(false);
+        setError(null);
         return;
       }
 
@@ -133,6 +136,8 @@ export function TradePanel({ session }: { session: Session }) {
   function selectPartner(rosterId: number) {
     if (rosterId === selected) return;
     setSelected(rosterId);
+    setRoster(null);
+    setRosterLoading(true);
     // A named target belongs to one opponent. Preserve category/protection
     // conditions across teams, but never carry an old team's player forward.
     setIntent((current) => ({ ...current, targetPlayerId: null }));
@@ -186,11 +191,11 @@ export function TradePanel({ session }: { session: Session }) {
 
   if (session.league.userTeamId === null) {
     return (
-      <div className="rounded-xl border border-dashed border-edge px-8 py-14 text-center">
-        <h2 className="font-display text-xl font-semibold uppercase tracking-wide">
+      <div className="card px-8 py-14 text-center">
+        <h2 className="font-display text-xl ">
           Trades need to know your team
         </h2>
-        <p className="mx-auto mt-2.5 max-w-md text-sm leading-relaxed text-muted">
+        <p className="mx-auto mt-2.5 max-w-md text-sm leading-relaxed text-ink-2">
           Re-import this league with your Sleeper username and CourtIQ can compare your roster
           against every other team.
         </p>
@@ -202,10 +207,11 @@ export function TradePanel({ session }: { session: Session }) {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="font-display text-3xl font-bold uppercase tracking-tight">Trade desk</h1>
-        <p className="mt-1.5 text-sm text-muted">
-          Pick a team and compare deterministic position-group depth.
+      <div className="on-field">
+        <h1 className="font-display text-3xl text-chalk">Trade desk</h1>
+        <p className="mt-1.5 text-sm text-bone-2">
+          Pick a team, set optional conditions, and let the deterministic engine find a valid
+          one-for-one fit.
         </p>
       </div>
 
@@ -214,20 +220,20 @@ export function TradePanel({ session }: { session: Session }) {
           <button
             key={t.rosterId}
             onClick={() => selectPartner(t.rosterId)}
-            className={`shrink-0 rounded-lg border px-4 py-2.5 text-left transition ${
+            className={`shrink-0  border px-4 py-2.5 text-left transition ${
               selected === t.rosterId
-                ? "border-teal bg-teal/10"
-                : "border-edge bg-panel hover:border-muted/40"
+                ? "border-ink bg-gold"
+                : "border-ink bg-bone hover:bg-gold"
             }`}
           >
-            <span className="block max-w-[11rem] truncate text-sm font-medium">{t.teamName}</span>
-            <span className="block text-xs text-muted">{t.playerCount} players</span>
+            <span className="block max-w-[11rem] truncate font-display text-sm">{t.teamName}</span>
+            <span className="block text-xs text-ink-2">{t.playerCount} players</span>
           </button>
         ))}
       </div>
 
       {error && (
-        <div role="alert" className="rounded-xl border border-red/40 bg-red/10 px-6 py-5 text-sm">
+        <div role="alert" className="card border-whistle bg-whistle text-bone px-6 py-5 text-sm">
           {error}
         </div>
       )}
@@ -244,13 +250,13 @@ export function TradePanel({ session }: { session: Session }) {
           />
 
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <h2 className="font-display text-xl font-semibold uppercase tracking-wide">
+            <h2 className="font-display text-xl ">
               {selectedTeam.teamName}
             </h2>
             <button
               onClick={suggestTrade}
               disabled={tradeLoading || rosterLoading || !roster}
-              className="rounded-lg bg-orange px-6 py-3 font-display text-sm font-semibold uppercase tracking-wide text-[#1a0d06] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+              className="bg-flag px-6 py-3 font-display text-sm  text-ink transition hover:bg-gold disabled:cursor-not-allowed disabled:opacity-40"
             >
               {tradeLoading
                 ? "Working the phones…"
@@ -264,10 +270,10 @@ export function TradePanel({ session }: { session: Session }) {
             <div className="space-y-6">
               {trade.found ? (
                 <>
-                  <div className="rounded-xl border border-edge bg-card p-6 sm:p-7">
+                  <div className="border-2 border-ink bg-bone-2 p-6 sm:p-7">
                     <div className="grid gap-5 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
                       <TradeSide
-                        label="You send"
+ label="You send"
                         name={trade.give.name}
                         meta={`${trade.give.position} / ${trade.give.team}`}
                         stats={trade.give.statLine}
@@ -275,13 +281,12 @@ export function TradePanel({ session }: { session: Session }) {
                       />
                       <div
                         aria-hidden
-                        className="grid place-items-center font-display text-2xl text-muted"
+                        className="grid place-items-center font-display text-2xl text-ink-2"
                       >
-                        <span className="hidden sm:block">&harr;</span>
-                        <span className="sm:hidden">&darr;</span>
+                        <Icon name="swap" className="h-6 w-6" />
                       </div>
                       <TradeSide
-                        label="You get"
+ label="You get"
                         name={trade.receive.name}
                         meta={`${trade.receive.position} / ${trade.receive.team}`}
                         stats={trade.receive.statLine}
@@ -292,15 +297,15 @@ export function TradePanel({ session }: { session: Session }) {
 
                     {/* What the manager asked for, and whether it landed. */}
                     {trade.goalDelta.length > 0 && (
-                      <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-edge pt-5">
-                        <span className="text-xs uppercase tracking-[0.12em] text-muted">
+                      <div className="mt-6 flex flex-wrap items-center gap-2 border-t-2 border-ink pt-5">
+                        <span className="text-xs  text-ink-2">
                           You asked for
                         </span>
                         {trade.goalDelta.map((g) => (
                           <span
                             key={g.key}
-                            className={`nums rounded-md px-2 py-0.5 text-xs font-medium ${
-                              g.delta >= 0 ? "bg-green/10 text-green" : "bg-red/10 text-red"
+                            className={`nums  px-2 py-0.5 text-xs font-medium ${
+                              g.delta >= 0 ? "bg-green/10 text-gain" : "bg-red/10 text-whistle"
                             }`}
                           >
                             {g.label} {g.delta >= 0 ? "+" : ""}
@@ -311,10 +316,10 @@ export function TradePanel({ session }: { session: Session }) {
                     )}
 
                     <div
-                      className={`flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-muted ${
+                      className={`flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-ink-2 ${
                         trade.goalDelta.length > 0
                           ? "mt-4"
-                          : "mt-6 border-t border-edge pt-5"
+                          : "mt-6 border-t-2 border-ink pt-5"
                       }`}
                     >
                       {trade.userNeed && trade.partnerNeed && (
@@ -333,7 +338,7 @@ export function TradePanel({ session }: { session: Session }) {
                       </span>
                     </div>
 
-                    <p className="mt-4 border-t border-edge pt-4 text-xs leading-relaxed text-muted">
+                    <p className="mt-4 border-t-2 border-ink pt-4 text-xs leading-relaxed text-ink-2">
                       {trade.rationale}
                     </p>
                   </div>
@@ -341,11 +346,11 @@ export function TradePanel({ session }: { session: Session }) {
                   <PersonaCallout commentary={trade.commentary} />
                 </>
               ) : (
-                <div className="rounded-xl border border-dashed border-edge px-8 py-12 text-center">
-                  <h3 className="font-display text-lg font-semibold uppercase tracking-wide">
+                <div className="card px-8 py-12 text-center">
+                  <h3 className="font-display text-lg ">
                     No trade worth making
                   </h3>
-                  <p className="mx-auto mt-2.5 max-w-md text-sm leading-relaxed text-muted">
+                  <p className="mx-auto mt-2.5 max-w-md text-sm leading-relaxed text-ink-2">
                     {trade.reason}
                   </p>
                 </div>
@@ -354,7 +359,7 @@ export function TradePanel({ session }: { session: Session }) {
           )}
 
           {rosterLoading ? (
-            <div className="h-64 animate-pulse rounded-xl border border-edge bg-panel" />
+            <div className="h-64 animate-pulse card" />
           ) : roster && roster.players.length > 0 ? (
             <PlayerList cards={roster.players} format={format} />
           ) : null}
@@ -382,14 +387,14 @@ function TradeSide({
   return (
     <div>
       <p
-        className={`text-xs uppercase tracking-[0.15em] ${highlight ? "text-teal" : "text-muted"}`}
+        className={`text-xs uppercase tracking-[0.15em] ${highlight ? "text-ink" : "text-ink-2"}`}
       >
         {label}
       </p>
-      <p className="mt-2 font-display text-2xl font-bold uppercase tracking-tight">{name}</p>
-      <p className="mt-1 text-sm text-muted">{meta}</p>
-      <p className="nums mt-3 text-xs text-muted">{stats}</p>
-      <p className="nums mt-2 font-display text-lg font-semibold text-teal">{score}</p>
+      <p className="mt-2 font-display text-2xl ">{name}</p>
+      <p className="mt-1 text-sm text-ink-2">{meta}</p>
+      <p className="nums mt-3 text-xs text-ink-2">{stats}</p>
+      <p className="nums mt-2 font-display text-lg font-semibold text-ink">{score}</p>
     </div>
   );
 }

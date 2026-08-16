@@ -7,12 +7,12 @@ export const runtime = "nodejs";
 /** Resolve a Sleeper username to the leagues they manage. */
 export async function POST(request: Request) {
   try {
-    const { username } = (await request.json()) as { username?: string };
+    const { username, sport } = (await request.json()) as { username?: string; sport?: string };
     if (!username?.trim()) {
       return NextResponse.json({ error: "Enter a Sleeper username." }, { status: 400 });
     }
 
-    const { user, leagues, season } = await findLeaguesForUsername(username);
+    const { user, leagues, season } = await findLeaguesForUsername(username, sport);
 
     return NextResponse.json({
       user,

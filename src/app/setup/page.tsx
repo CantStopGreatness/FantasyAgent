@@ -12,11 +12,13 @@ import {
 import { FORMAT_LABEL, saveSession, type Snapshot } from "@/lib/types";
 
 type Mode = "username" | "leagueId";
+type SportChoice = "nba" | "nfl" | "soccer";
 type LeagueOption = { leagueId: string; name: string; season: string; teamCount: number };
 
 export default function Setup() {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("username");
+  const [sport, setSport] = useState<SportChoice>("nba");
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -70,7 +72,7 @@ export default function Setup() {
         const res = await fetch("/api/leagues", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ username: value.trim() }),
+          body: JSON.stringify({ username: value.trim(), sport }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Could not find that user.");
@@ -162,9 +164,34 @@ export default function Setup() {
           Connect your league
         </h1>
         <p className="on-field mt-3 max-w-lg text-bone-2">
-          CourtIQ reads your NBA league from Sleeper: rosters, scoring settings, and league
+          CourtIQ reads your selected Sleeper league: rosters, scoring settings, and league
           context for the optional analyst explanation.
         </p>
+
+        <div className="mt-8">
+          <p className="on-field text-xs uppercase tracking-[0.15em] text-bone-3">Sport</p>
+          <div className="mt-2 inline-flex flex-wrap border-[3px] border-ink bg-bone">
+            {([
+              ["nba", "NBA"],
+              ["nfl", "NFL"],
+              ["soccer", "Soccer  Coming soon"],
+            ] as const).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                disabled={id === "soccer"}
+                onClick={() => setSport(id)}
+                aria-pressed={sport === id}
+                className={`px-4 py-2 font-display text-sm transition ${sport === id ? "bg-ink text-bone" : "text-ink hover:bg-gold"} disabled:cursor-not-allowed disabled:opacity-50`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {sport === "soccer" && (
+            <p className="mt-2 text-sm text-bone-2">Soccer league import is coming soon; CourtIQ does not have a live soccer data provider yet.</p>
+          )}
+        </div>
 
         <form onSubmit={handleSubmit} className="mt-10">
           <div className="inline-flex border-[3px] border-ink bg-bone">

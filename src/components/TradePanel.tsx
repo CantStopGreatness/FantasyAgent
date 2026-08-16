@@ -241,6 +241,7 @@ export function TradePanel({ session }: { session: Session }) {
       {selectedTeam && (
         <>
           <TradeConditions
+            categoryChoices={session.league.supportsCategories ? undefined : []}
             intent={intent}
             onChange={setIntent}
             partnerRoster={roster?.players ?? []}

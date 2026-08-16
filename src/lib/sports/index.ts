@@ -1,8 +1,9 @@
 import { nbaProfile } from "./nba";
+import { nflProfile } from "./nfl";
 import type { SportId, SportProfile } from "./types";
 
 export * from "./types";
-export { nbaProfile };
+export { nbaProfile, nflProfile };
 
 /**
  * Sports CourtIQ can actually score today. Imported leagues without a profile
@@ -10,6 +11,7 @@ export { nbaProfile };
  */
 export const SPORT_PROFILES: Partial<Record<SportId, SportProfile>> = {
   nba: nbaProfile,
+  nfl: nflProfile,
 };
 
 export const DEFAULT_SPORT: SportId = "nba";

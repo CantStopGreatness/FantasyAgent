@@ -11,7 +11,8 @@
     "verify:league": "tsx scripts/verify-league.ts",
     "verify:scoring": "tsx scripts/verify-scoring-support.ts",
     "verify:reliability": "tsx --conditions=react-server scripts/verify-reliability.ts",
-    "verify:demo": "tsx scripts/verify-demo.ts"
+    "verify:demo": "tsx scripts/verify-demo.ts",
+    "verify:nfl": "tsx scripts/verify-nfl.ts"
   },
   "dependencies": {
     "next": "16.3.1",

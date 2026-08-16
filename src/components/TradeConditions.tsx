@@ -11,6 +11,7 @@ import { NBA_CATEGORY_CHOICES, type PlayerCard, type TradeIntent } from "@/lib/t
  * value but delivers the category you asked for is a good deal.
  */
 export function TradeConditions({
+  categoryChoices = NBA_CATEGORY_CHOICES,
   intent,
   onChange,
   partnerRoster,
@@ -18,6 +19,7 @@ export function TradeConditions({
   myRoster,
   disabled,
 }: {
+  categoryChoices?: { key: string; label: string }[];
   intent: TradeIntent;
   onChange: (next: TradeIntent) => void;
   partnerRoster: PlayerCard[];
@@ -75,9 +77,9 @@ export function TradeConditions({
       </p>
 
       {/* Goal categories */}
-      <p className="mt-5 text-xs  text-ink-2">I want more…</p>
+      {categoryChoices.length > 0 && <p className="mt-5 text-xs  text-ink-2">I want more…</p>}
       <div className="mt-2.5 flex flex-wrap gap-2">
-        {NBA_CATEGORY_CHOICES.map((c) => {
+        {categoryChoices.map((c) => {
           const on = intent.wantCategories.includes(c.key);
           return (
             <button
@@ -107,11 +109,11 @@ export function TradeConditions({
         disabled={disabled}
         value={intent.targetPlayerId ?? ""}
         onChange={(e) => onChange({ ...intent, targetPlayerId: e.target.value || null })}
-        className="mt-2.5 w-full border-[3px] border-ink bg-bone-2 px-3 py-2.5 text-sm focus:bg-chalk focus:outline-none disabled:opacity-40"
+        className="mt-2.5 w-full border-[3px] border-ink bg-bone-2 px-3 py-2.5 text-sm text-ink [color-scheme:light] focus:bg-chalk focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
       >
-        <option value="">No preference — find the best fit</option>
+        <option className="bg-bone text-ink" value="">No preference — find the best fit</option>
         {partnerRoster.map((p) => (
-          <option key={p.playerId} value={p.playerId}>
+          <option className="bg-bone text-ink" key={p.playerId} value={p.playerId}>
             {p.name} · {p.position} · {p.scoreLabel}
           </option>
         ))}

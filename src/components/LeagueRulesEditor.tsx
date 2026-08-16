@@ -170,7 +170,7 @@ export function LeagueRulesEditor({
                 <span className="font-display text-ink">
                   {supportedScoringCount} of {scoring.length}
                 </span>{" "}
-                imported point rules have an exact NBA player rate and affect CourtIQ&apos;s
+                imported point rules have an exact player rate and affect CourtIQ&apos;s
                 calculation. The rest are explicitly excluded.
               </p>
               <ul className="mt-3 divide-y-[3px] divide-ink border-[3px] border-ink">
@@ -245,11 +245,11 @@ function RuleField({
         disabled={busy}
         value={String(current)}
         onChange={(e) => onChange(setting.key, e.target.value, setting.kind)}
-        className={`${cls} w-40`}
+        className={`${cls} w-40 text-ink [color-scheme:light]`}
       >
-        <option value="">Not set</option>
+        <option className="bg-bone text-ink" value="">Not set</option>
         {setting.options.map((o) => (
-          <option key={o.value} value={o.value}>
+          <option className="bg-bone text-ink" key={o.value} value={o.value}>
             {o.label}
           </option>
         ))}

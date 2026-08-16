@@ -1,4 +1,9 @@
 import type { SleeperLeague } from "@/lib/sleeper/types";
+import {
+  isScoringKeySupported,
+  pointScoringDef,
+  type SportProfile,
+} from "@/lib/sports";
 import type { ScoringFormat } from "./scoring";
 
 /**
@@ -37,14 +42,16 @@ export type RuleOverrides = Record<string, number | string>;
 /**
  * One per-stat point value from the league's scoring_settings.
  *
- * Unlike the rules above, these are load-bearing: in a points league they *are*
- * the ranking. Editing one re-scores the board, so corrections here round-trip
- * through the engine rather than only reaching the analyst.
+ * Unlike the rules above, supported values are load-bearing in a points league.
+ * They round-trip through the engine; unsupported values are retained only so
+ * the product can identify them as excluded.
  */
 export type ScoringStat = {
   key: string;
   label: string;
   value: number;
+  /** Whether this value is backed by an exact normalized player rate. */
+  supported: boolean;
   edited?: boolean;
 };
 
@@ -162,39 +169,12 @@ function countStarters(rosterPositions: string[] | null): number | null {
   return rosterPositions.filter((p) => p !== "BN" && p !== "IR" && p !== "TAXI").length;
 }
 
-/**
- * Human labels for scoring stat keys.
- *
- * Sleeper's keys vary by sport and are not documented, so anything missing here
- * falls back to the raw key rather than being hidden — an unlabelled row the
- * user can still see and edit beats a silently dropped one.
- */
-const STAT_LABELS: Record<string, string> = {
-  pts: "Points",
-  reb: "Rebounds",
-  oreb: "Offensive rebounds",
-  dreb: "Defensive rebounds",
-  ast: "Assists",
-  stl: "Steals",
-  blk: "Blocks",
-  to: "Turnovers",
-  tpm: "Three-pointers made",
-  tpa: "Three-pointers attempted",
-  fgm: "Field goals made",
-  fga: "Field goals attempted",
-  ftm: "Free throws made",
-  fta: "Free throws attempted",
-  pf: "Personal fouls",
-  dd: "Double-doubles",
-  td: "Triple-doubles",
-  gp: "Games played",
-};
-
-export function statLabel(key: string): string {
-  return STAT_LABELS[key] ?? key.replace(/_/g, " ").toUpperCase();
+export function statLabel(profile: SportProfile, key: string): string {
+  return pointScoringDef(profile, key)?.label ?? key.replace(/_/g, " ").toUpperCase();
 }
 
 export function parseScoring(
+  profile: SportProfile,
   scoringSettings: Record<string, number> | null,
   overrides: Record<string, number> = {},
 ): ScoringStat[] {
@@ -203,18 +183,28 @@ export function parseScoring(
 
   return Object.entries(merged)
     .filter(([, v]) => typeof v === "number" && isFinite(v))
-    // Zero-weighted stats are noise on a settings screen unless the user set one.
-    .filter(([k, v]) => v !== 0 || k in overrides)
     .map(([key, value]) => ({
       key,
-      label: statLabel(key),
+      label: statLabel(profile, key),
       value,
+      supported: isScoringKeySupported(profile, key),
       edited: key in overrides,
     }))
     .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
 }
 
+export function scoringCoverage(scoring: ScoringStat[]): {
+  supported: number;
+  total: number;
+} {
+  return {
+    supported: scoring.filter((stat) => stat.supported).length,
+    total: scoring.length,
+  };
+}
+
 export function parseLeagueRules(
+  profile: SportProfile,
   league: SleeperLeague,
   format: ScoringFormat,
   formatInferred: boolean,
@@ -250,7 +240,7 @@ export function parseLeagueRules(
     formatInferred,
     rosterSize: countStarters(league.roster_positions),
     settings,
-    scoring: parseScoring(league.scoring_settings, scoringOverrides),
+    scoring: parseScoring(profile, league.scoring_settings, scoringOverrides),
     raw,
   };
 }
@@ -280,8 +270,11 @@ export function rulesForPrompt(rules: LeagueRules, currentWeek: number | null): 
   // which stats this league actually pays for. Only the ones that move the
   // needle — a full dump of twenty near-zero weights is noise.
   if (rules.format === "points" && rules.scoring.length) {
-    const notable = rules.scoring.slice(0, 8).map((s) => `${s.label} ${s.value}`);
-    lines.push(`Point values: ${notable.join(", ")}.`);
+    const notable = rules.scoring
+      .filter((s) => s.supported && s.value !== 0)
+      .slice(0, 8)
+      .map((s) => `${s.label} ${s.value}`);
+    if (notable.length) lines.push(`Point values: ${notable.join(", ")}.`);
   }
   return lines;
 }

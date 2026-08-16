@@ -1,67 +1,342 @@
 @import "tailwindcss";
 
-/* ── CourtIQ design tokens ─────────────────────────────────────────────── */
+/* ── CourtIQ: turf-and-sideline ────────────────────────────────────────────
+ * A retro sports-sim world. The ground is a playing surface; every panel is a
+ * sideline card printed on bone stock and hard-ruled in ink. Flat colour does
+ * all the work — no gradients, no glass, no soft elevation. Depth comes from
+ * ruling and from stacking flat planes, the way a printed stat sheet does.
+ */
 :root {
-  --bg: #0d1117;
-  --panel: #161b22;
-  --card: #1c232d;
-  --border: #2a3341;
-  --text: #f0f3f6;
-  --muted: #8b96a5;
-  --orange: #ff6b35;
-  --teal: #00c2d1;
-  --green: #2ecc71;
-  --red: #e6484f;
+  /* The field itself */
+  --field: #1b7a48;
+  --field-deep: #10502f;
+  --field-line: #2f9a61;
+
+  /* Printed stock */
+  --bone: #f4eddd;
+  --bone-2: #e7dcc4;
+  --bone-3: #d8cbaf;
+
+  /* Ink */
+  --ink: #14201a;
+  --ink-2: #4d5f54;
+  --chalk: #ffffff;
+
+  /* Signals */
+  --flag: #e4572e;
+  --gold: #f0b429;
+  --whistle: #c0182f;
+  --gain: #1b7a48;
+  --leather: #a95f30;
+
+  --rule: 3px;
+  /* One pixel of sprite art, and the grain size everything else dithers on. */
+  --px: 4px;
 }
 
 @theme inline {
-  --color-bg: var(--bg);
-  --color-panel: var(--panel);
-  --color-card: var(--card);
-  --color-edge: var(--border);
-  --color-ink: var(--text);
-  --color-muted: var(--muted);
-  --color-orange: var(--orange);
-  --color-teal: var(--teal);
-  --color-green: var(--green);
-  --color-red: var(--red);
+  --color-field: var(--field);
+  --color-field-deep: var(--field-deep);
+  --color-field-line: var(--field-line);
+  --color-bone: var(--bone);
+  --color-bone-2: var(--bone-2);
+  --color-bone-3: var(--bone-3);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-chalk: var(--chalk);
+  --color-flag: var(--flag);
+  --color-gold: var(--gold);
+  --color-whistle: var(--whistle);
+  --color-gain: var(--gain);
 
-  --font-display: var(--font-barlow), ui-sans-serif, system-ui, sans-serif;
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-archivo-black), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
 }
 
-/* CourtIQ is a committed dark-surface product — no light variant. */
+/* A daylight surface: this is a field in the sun, not a broadcast booth. */
 html {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--font-sans);
+  background: var(--field);
+  color: var(--ink);
+  /* Same reason as .font-display below: `@theme inline` does not publish
+     --font-sans as a custom property, so point at the real font variable. */
+  font-family: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
-/* Display face: condensed, tight, uppercase-friendly. */
-.font-display {
-  font-family: var(--font-display);
-  letter-spacing: 0.01em;
+/* The field.
+ *
+ * Four layers rather than one flat green, so the ground has grain the way a
+ * mowed pitch does: a hard checkerboard dither at the pixel grid, a finer
+ * offset dither to break the checker's regularity, mow stripes, and the yard
+ * lines on top. Fixed attachment keeps it reading as ground the panels sit on
+ * rather than a texture that slides with them.
+ */
+.turf {
+  background-color: var(--field);
+  background-image:
+    /* yard lines */
+    repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent 5.5rem,
+      color-mix(in oklab, var(--field-line) 60%, transparent) 5.5rem,
+      color-mix(in oklab, var(--field-line) 60%, transparent) calc(5.5rem + var(--px))
+    ),
+    /* mow stripes */
+    repeating-linear-gradient(
+      90deg,
+      color-mix(in oklab, var(--field-deep) 22%, transparent) 0 88px,
+      transparent 88px 176px
+    ),
+    /* fine offset dither */
+    repeating-conic-gradient(
+      color-mix(in oklab, var(--field-deep) 30%, transparent) 0% 25%,
+      transparent 0% 50%
+    ),
+    /* coarse checker dither */
+    repeating-conic-gradient(
+      color-mix(in oklab, var(--field-line) 26%, transparent) 0% 25%,
+      transparent 0% 50%
+    );
+  background-size:
+    auto,
+    auto,
+    calc(var(--px) * 2) calc(var(--px) * 2),
+    calc(var(--px) * 4) calc(var(--px) * 4);
+  background-attachment: fixed;
 }
 
-/* Tabular figures keep score columns from shifting as values change. */
+/* Reference the next/font variable directly. `@theme inline` substitutes its
+   values into generated utilities and never emits --font-display as a real
+   custom property, so pointing at that name here resolves to nothing and the
+   display face silently degrades to inherited body text. */
+.font-display {
+  font-family: var(--font-archivo-black), ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+/* Scores and ranks sit in columns; tabular figures keep them from dancing. */
 .nums {
   font-variant-numeric: tabular-nums;
 }
 
-::selection {
-  background: color-mix(in oklab, var(--orange) 35%, transparent);
+/* The world's one primitive: bone stock, hard-ruled.
+   The faint checker keeps a large panel from reading as flat digital fill —
+   it is printed stock, not poured colour. Set as longhand because the
+   `background` shorthand would reset the image. */
+.card {
+  background-color: var(--bone);
+  background-image: repeating-conic-gradient(
+    color-mix(in oklab, var(--bone-3) 38%, transparent) 0% 25%,
+    transparent 0% 50%
+  );
+  background-size: calc(var(--px) * 2) calc(var(--px) * 2);
+  border: var(--rule) solid var(--ink);
 }
 
-/* Focus ring — visible on the dark ground without being loud. */
+/* A scoreboard strip — ink ground, chalk lettering, faint scanline. */
+.strip {
+  background-color: var(--ink);
+  background-image: repeating-linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.055) 0 1px,
+    transparent 1px 3px
+  );
+  color: var(--bone);
+}
+
+::selection {
+  background: var(--gold);
+  color: var(--ink);
+}
+
 :where(a, button, input, select, [tabindex]):focus-visible {
-  outline: 2px solid var(--teal);
+  outline: var(--rule) solid var(--ink);
   outline-offset: 2px;
-  border-radius: 4px;
+}
+
+.strip :where(a, button, select):focus-visible,
+.on-field :where(a, button, select):focus-visible {
+  outline-color: var(--gold);
+}
+
+/* The one authored moment: cards deal in like they are being laid on a table.
+   Exponential ease-out, from an already-visible default so nothing depends on
+   JS or the animation running at all. */
+@keyframes deal {
+  from {
+    transform: translateY(10px);
+    opacity: 0.4;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.deal {
+  animation: deal 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ── Sprite loops ─────────────────────────────────────────────────────────
+ * Quantised with steps() so movement lands frame to frame like a sprite game
+ * rather than gliding. Each scene pauses when it leaves the viewport.
+ */
+.pixel-scene[data-running="false"] * {
+  animation-play-state: paused;
+}
+
+/* Reel lanes: a dark screen set into the bone card, so bone nets, a white
+   goal and an orange ball all read against the ground. */
+.lane {
+  background-color: var(--field-deep);
+  background-image: repeating-conic-gradient(
+    rgba(255, 255, 255, 0.045) 0% 25%,
+    transparent 0% 50%
+  );
+  background-size: calc(var(--px) * 2) calc(var(--px) * 2);
+}
+
+/* Sprite-sheet playback: scrub a horizontal strip of frames. */
+@keyframes play-frames {
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+.pixel-anim {
+  display: block;
+  overflow: hidden;
+}
+
+.pixel-anim > svg {
+  animation-name: play-frames;
+  animation-iteration-count: infinite;
+  will-change: transform;
+}
+
+/* A shot: up off the hand, over the top, and down THROUGH the rim.
+   The rim's centre is 52px in from the lane's right edge and its underside is
+   at 72px (see HoopLane). The ball is 44px, so a left offset of 100% - 74px
+   puts its centre on that line; 50/68/100 walk its top from the rim, into the
+   net, and out the bottom. 56% is the frame the net strip snaps taut on. */
+@keyframes shot-arc {
+  0% {
+    transform: translate(6px, 64px);
+    opacity: 0;
+  }
+  8%,
+  74% {
+    opacity: 1;
+  }
+  32% {
+    transform: translate(calc(45% - 22px), 0px);
+  }
+  56% {
+    transform: translate(calc(100% - 74px), 50px);
+  }
+  68% {
+    transform: translate(calc(100% - 74px), 68px);
+  }
+  80% {
+    transform: translate(calc(100% - 74px), 100px);
+    opacity: 0;
+  }
+  100% {
+    transform: translate(6px, 64px);
+    opacity: 0;
+  }
+}
+
+.ball-shot {
+  animation: shot-arc 3.6s steps(12, end) infinite;
+}
+
+/* The throw: a parabola across the lane, fading in and out at the edges so it
+   is never hard-clipped by the lane boundary. No rotation here — the spin is
+   frames, handled by the sprite strip itself. */
+@keyframes throw-arc {
+  0% {
+    transform: translate(-100px, 74px);
+    opacity: 0;
+  }
+  12%,
+  86% {
+    opacity: 1;
+  }
+  32% {
+    transform: translate(28%, 22px);
+  }
+  50% {
+    transform: translate(calc(50% - 46px), 8px);
+  }
+  68% {
+    transform: translate(72%, 22px);
+  }
+  100% {
+    transform: translate(calc(100% + 20px), 74px);
+    opacity: 0;
+  }
+}
+
+.ball-throw {
+  animation: throw-arc 4.4s steps(22, end) infinite;
+}
+
+/* Struck low into the goal, then gone into the mesh. */
+@keyframes strike-goal {
+  0% {
+    transform: translate(4px, 0px);
+    opacity: 0;
+  }
+  10%,
+  54% {
+    opacity: 1;
+  }
+  36% {
+    transform: translate(calc(45% - 17px), -14px);
+  }
+  56% {
+    transform: translate(calc(100% - 105px), -22px);
+  }
+  64% {
+    transform: translate(calc(100% - 92px), -20px);
+    opacity: 0;
+  }
+  100% {
+    transform: translate(4px, 0px);
+    opacity: 0;
+  }
+}
+
+.ball-strike {
+  animation: strike-goal 3.6s steps(12, end) infinite;
+}
+
+/* A ball held on the dribble while something loads. */
+@keyframes dribble {
+  0%,
+  100% {
+    transform: translateY(0) scaleY(1);
+  }
+  40% {
+    transform: translateY(9px) scaleY(0.86);
+  }
+  50% {
+    transform: translateY(10px) scaleY(0.8);
+  }
+  60% {
+    transform: translateY(9px) scaleY(0.86);
+  }
+}
+
+.ball-dribble {
+  transform-origin: bottom center;
+  animation: dribble 620ms steps(5, end) infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -70,5 +345,116 @@ body {
   *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+  }
+}
+/* ── The load sequence ────────────────────────────────────────────────────
+ * The headline types itself in, line by line, the way an arcade attract
+ * screen does. clip-path rather than width because the text keeps its final
+ * layout the whole time: nothing reflows as characters land, and the reveal
+ * needs no measurement. steps() is what makes it read as typing rather than
+ * as a wipe. Duration and step count are set per line from its length.
+ */
+@keyframes type-in {
+  to {
+    clip-path: inset(0 -0.12em 0 0);
+  }
+}
+
+/* fit-content matters: clip-path percentages resolve against the element's own
+   box, so a full-width block would reveal across the column rather than across
+   the words — a short line would finish typing early and then sit through dead
+   time while its animation ran out. Shrinking each line to its text makes the
+   reveal rate the typing rate. */
+.type-line {
+  display: block;
+  width: fit-content;
+  clip-path: inset(0 100% 0 0);
+  animation-name: type-in;
+  animation-fill-mode: both;
+}
+
+/* A block caret, typed last, then left blinking. */
+@keyframes caret-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.caret {
+  display: inline-block;
+  /* Wide enough to read as a block cursor. A narrow bar at display size
+     just looks like a stray capital I on the end of the word. */
+  width: 0.5em;
+  height: 0.72em;
+  margin-left: 0.1em;
+  background: currentColor;
+  vertical-align: baseline;
+  animation: caret-blink 1s steps(1, end) infinite;
+}
+
+/* Everything under the headline arrives after the typing lands. Its own
+   keyframes rather than `deal`, which starts at 0.4 opacity — held through a
+   near-three-second delay that reads as a rendering fault, not a wait. */
+@keyframes rise {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.after-type {
+  animation: rise 460ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Slides stack in one grid cell, so the inactive ones must keep their space —
+   visibility rather than display, or the panel would collapse to the height of
+   whichever card is showing and shunt the page on every turn. */
+.proof-slide {
+  visibility: hidden;
+  opacity: 0;
+}
+
+/* The incoming card wipes in on steps, the same mechanical reveal as the
+   headline. Because the animation only applies while the slide is active, it
+   restarts on its own each time the deck turns — no key churn, no timers. */
+@keyframes wipe-in {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+.proof-slide[data-active="true"] {
+  visibility: visible;
+  opacity: 1;
+  animation: wipe-in 300ms steps(9) both;
+}
+
+/* Reduced motion needs the delays gone too, not just the durations. The block
+   above only zeroes duration, so a staged sequence would still hold the
+   headline and everything under it blank for three seconds — the wait is the
+   part that hurts here. Scoped to the load sequence so the sprite loops keep
+   their own timing. */
+@media (prefers-reduced-motion: reduce) {
+  .type-line,
+  .after-type {
+    animation-delay: 0s !important;
+  }
+
+  /* A caret with nothing left to type is decoration; blinking it at a 0.01ms
+     duration would be strobe. */
+  .caret {
+    animation: none !important;
   }
 }

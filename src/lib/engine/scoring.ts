@@ -1,5 +1,5 @@
 import { fantasyRelevant, rateOf, type PlayerRates } from "./rates";
-import type { CategoryDef, SportProfile } from "@/lib/sports";
+import { pointScoringRate, type CategoryDef, type SportProfile } from "@/lib/sports";
 
 export type ScoringFormat = "category" | "points";
 
@@ -13,13 +13,16 @@ export type ScoringFormat = "category" | "points";
  * exactly why a high-volume, low-efficiency scorer thrives here.
  */
 export function pointsScore(
+  profile: SportProfile,
   rates: PlayerRates,
   settings: Record<string, number>,
 ): number {
   let total = 0;
   for (const [stat, weight] of Object.entries(settings)) {
     if (typeof weight !== "number" || !isFinite(weight)) continue;
-    total += rateOf(rates, stat) * weight;
+    const rate = pointScoringRate(profile, rates, stat);
+    if (rate === null) continue;
+    total += rate * weight;
   }
   return total;
 }
@@ -152,7 +155,7 @@ export function scorePlayer(
     return {
       playerId: rates.playerId,
       rates,
-      score: pointsScore(rates, pointsSettings),
+      score: pointsScore(profile, rates, pointsSettings),
       zScores: null,
     };
   }

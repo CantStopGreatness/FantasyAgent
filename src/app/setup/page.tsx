@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Icon } from "@/components/Icon";
 import {
   EMPTY_OVERRIDES,
   LeagueRulesEditor,
@@ -33,7 +34,7 @@ export default function Setup() {
     resolvedUserId: string | null,
     o: Overrides = EMPTY_OVERRIDES,
   ) {
-    setStatus("Reading rosters, scoring settings, and league rules…");
+    setStatus("Reading rosters, scoring settings, and league rules...");
     const res = await fetch("/api/snapshot", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -65,7 +66,7 @@ export default function Setup() {
       if (mode === "leagueId") {
         await loadLeague(value.trim(), null);
       } else {
-        setStatus("Finding your leagues…");
+        setStatus("Finding your leagues...");
         const res = await fetch("/api/leagues", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -111,7 +112,7 @@ export default function Setup() {
   /**
    * Re-read the league under the user's corrections.
    *
-   * Scoring edits change the rankings, so this round-trips rather than just
+   * Supported scoring edits change the rankings, so this round-trips rather than just
    * updating the display.
    */
   async function applyOverrides(next: Overrides) {
@@ -146,27 +147,27 @@ export default function Setup() {
   }
 
   return (
-    <main className="min-h-dvh">
-      <header className="border-b border-edge">
-        <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-5">
-          <Link href="/" className="font-display text-xl font-bold tracking-wide">
-            COURT<span className="text-orange">IQ</span>
+    <main className="turf min-h-dvh pb-16">
+      <header className="strip border-b-[3px] border-ink">
+        <div className="mx-auto flex max-w-3xl items-center justify-between px-5 py-3 sm:px-6">
+          <Link href="/" className="font-display text-xl text-bone">
+            COURT<span className="text-gold">IQ</span>
           </Link>
-          <span className="text-xs uppercase tracking-[0.2em] text-muted">Import</span>
+          <span className="font-display text-sm text-bone-3">IMPORT</span>
         </div>
       </header>
 
-      <div className="mx-auto max-w-3xl px-6 py-14">
-        <h1 className="font-display text-4xl font-bold uppercase tracking-tight sm:text-5xl">
+      <div className="mx-auto max-w-3xl px-5 py-10 sm:px-6">
+        <h1 className="on-field font-display text-4xl text-chalk sm:text-5xl">
           Connect your league
         </h1>
-        <p className="mt-3 max-w-lg text-muted">
-          CourtIQ reads your league straight from Sleeper: rosters, scoring settings, and the
-          rules that decide what a good move actually is.
+        <p className="on-field mt-3 max-w-lg text-bone-2">
+          CourtIQ reads your NBA league from Sleeper: rosters, scoring settings, and league
+          context for the optional analyst explanation.
         </p>
 
         <form onSubmit={handleSubmit} className="mt-10">
-          <div className="inline-flex rounded-lg border border-edge bg-panel p-1">
+          <div className="inline-flex border-[3px] border-ink bg-bone">
             {(
               [
                 ["username", "Sleeper username"],
@@ -180,8 +181,9 @@ export default function Setup() {
                   setMode(m);
                   setError(null);
                 }}
-                className={`rounded-md px-4 py-2 text-sm font-medium transition ${
-                  mode === m ? "bg-card text-ink" : "text-muted hover:text-ink"
+                aria-pressed={mode === m}
+                className={`px-4 py-2 font-display text-sm transition ${
+                  mode === m ? "bg-ink text-bone" : "text-ink hover:bg-gold"
                 }`}
               >
                 {label}
@@ -190,38 +192,42 @@ export default function Setup() {
           </div>
 
           <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+            <label htmlFor="league-lookup" className="sr-only">
+              {mode === "username" ? "Sleeper username" : "Sleeper league ID"}
+            </label>
             <input
+              id="league-lookup"
               value={value}
               onChange={(e) => setValue(e.target.value)}
               placeholder={mode === "username" ? "e.g. yourhandle" : "e.g. 1234567890123456789"}
               autoComplete="off"
               spellCheck={false}
-              className="flex-1 rounded-lg border border-edge bg-panel px-4 py-3.5 text-ink placeholder:text-muted/60 focus:border-teal focus:outline-none"
+              className="flex-1 border-[3px] border-ink bg-bone px-4 py-3.5 text-ink placeholder:text-ink-2/60 focus:bg-chalk focus:outline-none"
             />
             <button
               type="submit"
               disabled={busy || !value.trim()}
-              className="rounded-lg bg-orange px-7 py-3.5 font-display text-base font-semibold uppercase tracking-wide text-[#1a0d06] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+              className="border-[3px] border-ink bg-flag px-7 py-3.5 font-display text-base text-ink transition hover:bg-gold disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {busy ? "Importing…" : "Import"}
+              {busy ? "Importing..." : "Import"}
             </button>
           </div>
         </form>
 
         {status && (
           <div
-            role="status"
-            className="mt-8 flex items-center gap-3 rounded-lg border border-edge bg-panel px-5 py-4 text-sm text-muted"
+              role="status"
+            className="card mt-8 flex items-center gap-3 px-5 py-4 text-sm text-ink-2"
           >
-            <span className="h-2 w-2 animate-pulse rounded-full bg-teal" />
+            <span className="h-2.5 w-2.5 animate-pulse bg-flag" />
             {status}
           </div>
         )}
 
         {error && (
           <div
-            role="alert"
-            className="mt-8 rounded-lg border border-red/40 bg-red/10 px-5 py-4 text-sm text-ink"
+              role="alert"
+            className="card mt-8 border-whistle bg-whistle px-5 py-4 text-sm text-bone"
           >
             {error}
           </div>
@@ -229,7 +235,7 @@ export default function Setup() {
 
         {leagues && !snapshot && (
           <section className="mt-10">
-            <h2 className="font-display text-xl font-semibold uppercase tracking-wide">
+            <h2 className="on-field font-display text-xl text-chalk">
               Pick a league
             </h2>
             <ul className="mt-4 space-y-2">
@@ -238,17 +244,15 @@ export default function Setup() {
                   <button
                     onClick={() => pickLeague(l.leagueId)}
                     disabled={busy}
-                    className="flex w-full items-center justify-between rounded-lg border border-edge bg-panel px-5 py-4 text-left transition hover:border-teal/60 disabled:opacity-50"
+                    className="card flex w-full items-center justify-between px-5 py-4 text-left transition hover:bg-gold disabled:opacity-50"
                   >
                     <span>
-                      <span className="block font-medium">{l.name}</span>
-                      <span className="text-sm text-muted">
-                        {l.season} season · {l.teamCount} teams
+                      <span className="block font-display text-base">{l.name}</span>
+                      <span className="text-sm text-ink-2">
+                        {l.season} season / {l.teamCount} teams
                       </span>
                     </span>
-                    <span aria-hidden className="text-muted">
-                      →
-                    </span>
+                    <Icon name="arrow-right" className="h-4 w-4 shrink-0 text-ink-2" />
                   </button>
                 </li>
               ))}
@@ -300,20 +304,19 @@ function ConfirmLeague({
     Object.keys(overrides.scoring).length;
 
   return (
-    <section className="mt-10 rounded-xl border border-edge bg-panel p-7">
-      <div className="flex items-center gap-2 text-sm text-green">
-        <span className="h-1.5 w-1.5 rounded-full bg-green" />
-        League imported
+    <section className="card deal mt-10">
+      <div className="strip flex items-center gap-2 px-5 py-2.5">
+        <Icon name="check" className="h-3.5 w-3.5 text-gold" />
+        <span className="font-display text-sm">LEAGUE IMPORTED</span>
       </div>
 
-      <h2 className="mt-3 font-display text-3xl font-bold uppercase tracking-tight">
-        {league.name}
-      </h2>
-      <p className="mt-1.5 text-sm text-muted">
-        {league.sportLabel} · {league.teamCount} teams · scoring against the {league.statsSeason}{" "}
+      <div className="px-5 pt-5 sm:px-6">
+        <h2 className="font-display text-3xl leading-none">{league.name}</h2>
+        <p className="mt-2 text-sm text-ink-2">
+          {league.sportLabel} / {league.teamCount} teams / scoring against the {league.statsSeason}{" "}
         season
         {league.statsSeason !== league.season && " (the last one played)"}
-      </p>
+        </p>
 
       <dl className="mt-7 grid grid-cols-2 gap-x-6 gap-y-6 sm:grid-cols-4">
         {[
@@ -326,8 +329,8 @@ function ConfirmLeague({
           { label: "With scoreable stats", value: String(league.scoredCount) },
         ].map((s) => (
           <div key={s.label}>
-            <dt className="text-xs uppercase tracking-[0.12em] text-muted">{s.label}</dt>
-            <dd className="nums mt-1.5 font-display text-2xl font-semibold text-teal">
+            <dt className="text-xs text-ink-2">{s.label}</dt>
+            <dd className="nums mt-1 font-display text-2xl">
               {s.value}
             </dd>
           </div>
@@ -336,28 +339,29 @@ function ConfirmLeague({
 
       {/* Everything editable lives behind one disclosure so importing a league
           does not open onto a wall of form fields. */}
-      <div className="mt-7 border-t border-edge pt-6">
+      <div className="mt-7 border-t-[3px] border-ink pt-6">
         <button
-          type="button"
+              type="button"
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
           className="flex w-full items-center justify-between gap-4 text-left"
         >
           <span>
-            <span className="font-display text-sm font-semibold uppercase tracking-[0.12em]">
+            <span className="font-display text-sm">
               League rules &amp; scoring
             </span>
-            <span className="mt-1 block text-xs text-muted">
+            <span className="mt-1 block text-xs text-ink-2">
               {setCount} rule{setCount === 1 ? "" : "s"} and {scoring.length} scoring value
               {scoring.length === 1 ? "" : "s"} read from Sleeper
-              {editCount > 0 && ` · ${editCount} edited`}
+              {editCount > 0 && ` / ${editCount} edited`}
             </span>
           </span>
-          <span className="shrink-0 whitespace-nowrap text-xs text-muted">
-            {open ? "Hide" : "Review & edit"}{" "}
-            <span aria-hidden className={open ? "inline-block rotate-180" : "inline-block"}>
-              ▾
-            </span>
+          <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-ink-2">
+            {open ? "Hide" : "Review & edit"}
+            <Icon
+              name="chevron-down"
+              className={`h-2.5 w-2.5 transition-transform ${open ? "rotate-180" : ""}`}
+            />
           </span>
         </button>
 
@@ -379,7 +383,7 @@ function ConfirmLeague({
       </div>
 
       {league.userTeamId === null && (
-        <p className="mt-7 rounded-lg border border-edge bg-card px-5 py-4 text-sm text-muted">
+        <p className="mt-7 border-[3px] border-ink bg-bone-2 px-5 py-4 text-sm text-ink-2">
           We could not tell which team is yours, import by username instead of league ID to
           unlock My Team and trade suggestions.
         </p>
@@ -388,10 +392,12 @@ function ConfirmLeague({
       <button
         onClick={onContinue}
         disabled={busy}
-        className="mt-7 w-full rounded-lg bg-orange px-7 py-4 font-display text-lg font-semibold uppercase tracking-wide text-[#1a0d06] transition hover:brightness-110 disabled:opacity-40 sm:w-auto"
+        className="mt-7 mb-6 inline-flex w-full items-center justify-center gap-2.5 border-[3px] border-ink bg-flag px-7 py-4 font-display text-lg text-ink transition hover:bg-gold disabled:opacity-50 sm:w-auto"
       >
-        Looks right, continue →
+        Looks right, continue
+        <Icon name="arrow-right" className="h-4 w-4" />
       </button>
+      </div>
     </section>
   );
 }

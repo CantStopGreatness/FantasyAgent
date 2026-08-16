@@ -1,5 +1,6 @@
 import { getPlayers, getSeasonStats, getTrendingAdds } from "@/lib/sleeper/client";
-import type { SleeperPlayer } from "@/lib/sleeper/types";
+import { DEMO_FIXTURE, isDemoLeague } from "@/lib/demo";
+import type { SleeperPlayer, StatsBySeason } from "@/lib/sleeper/types";
 import { getProfile, rateOf, type SportProfile } from "@/lib/sports";
 import { describeForm, getRecentForm, type FormDelta } from "./form";
 import { fantasyRelevant, ratesFromStats, type PlayerRates } from "./rates";
@@ -60,12 +61,25 @@ export async function buildAnalysis(snapshot: LeagueSnapshot): Promise<AnalysisC
   const profile = getProfile(snapshot.sport);
   if (!profile) throw new Error(`No scoring profile for ${snapshot.sport}`);
 
-  const [players, stats, form, buzz] = await Promise.all([
-    getPlayers(profile.id),
-    getSeasonStats(profile.id, snapshot.statsSeason),
-    getRecentForm(profile.id, snapshot.statsSeason),
-    getTrendingAdds(profile.id),
-  ]);
+  const demo = isDemoLeague(snapshot.leagueId) ? DEMO_FIXTURE : null;
+  let players: Record<string, SleeperPlayer>;
+  let stats: StatsBySeason;
+  let form: Map<string, FormDelta>;
+  let buzz: Record<string, number>;
+
+  if (demo) {
+    players = demo.players;
+    stats = demo.seasonStats;
+    form = new Map();
+    buzz = demo.trendingAdds;
+  } else {
+    [players, stats, form, buzz] = await Promise.all([
+      getPlayers(profile.id),
+      getSeasonStats(profile.id, snapshot.statsSeason),
+      getRecentForm(profile.id, snapshot.statsSeason),
+      getTrendingAdds(profile.id),
+    ]);
+  }
 
   const rates = ratesFromStats(profile, stats);
   const norms = computeNorms(profile, rates.values());
@@ -78,7 +92,7 @@ export async function buildAnalysis(snapshot: LeagueSnapshot): Promise<AnalysisC
     settings && Object.keys(settings).length > 0 ? settings : profile.defaultPointsSettings;
 
   // Both formats are always computed. Even with the format locked to the
-  // league, the cross-format rank is what makes a recommendation explicable —
+  // league, the cross-format rank is what makes a recommendation explicable --
   // "69th here, 5th in points formats, and his FT% is why".
   const ranksByFormat: Record<ScoringFormat, Map<string, number>> = {
     category: new Map(
@@ -109,7 +123,7 @@ export async function buildAnalysis(snapshot: LeagueSnapshot): Promise<AnalysisC
   };
 }
 
-/* ── Reason tags ─────────────────────────────────────────────────────────
+/* -- Reason tags ----------------------------------------------------------
  * Deterministic and rule-based, exactly like the ranking itself. The AI layer
  * narrates these; it never invents them.
  */
@@ -151,7 +165,7 @@ function buildTags(
   if (rates.mpg >= 30) tags.push({ label: "Heavy Minutes", tone: "good" });
   if (player?.injury_status) tags.push({ label: player.injury_status, tone: "warn" });
 
-  // Keep cards quiet — the design brief asks for less competing metadata.
+  // Keep cards quiet; the design brief asks for less competing metadata.
   return tags.slice(0, format === "category" ? 3 : 2);
 }
 
@@ -180,7 +194,7 @@ function toRecommendation(
   return {
     playerId: rates.playerId,
     name: player?.full_name ?? `Player ${rates.playerId}`,
-    position: player?.fantasy_positions?.[0] ?? "—",
+    position: player?.fantasy_positions?.[0] ?? "N/A",
     team: player?.team ?? "FA",
     injuryStatus: player?.injury_status ?? null,
     age: player?.age ?? null,
@@ -221,7 +235,7 @@ export function getWaiverRecommendations(
  * Sleepers: available players who are *rising* rather than merely good.
  *
  * Ranked on a blend of role trend, league-wide add velocity, and per-36
- * production that outstrips their current minutes — the profile of someone
+ * production that outstrips their current minutes -- the profile of someone
  * about to be worth more than their box score says today.
  */
 export function getSleepers(
@@ -269,7 +283,7 @@ export function getSleepers(
     } else if (youth) {
       reason = `Age ${player?.age} and already producing in a rotation role`;
     } else {
-      reason = `Producing more than his ownership suggests`;
+      reason = `Available with a positive deterministic sleeper signal`;
     }
 
     return { rates, rise, reason };

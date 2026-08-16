@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Icon } from "./Icon";
 import { PersonaCallout } from "./PersonaCallout";
 import { PlayerList } from "./PlayerCards";
 import { TradeConditions } from "./TradeConditions";
@@ -14,15 +15,20 @@ import {
 } from "@/lib/types";
 
 const FAIRNESS_COPY: Record<string, { label: string; className: string }> = {
-  even: { label: "Even value", className: "text-green" },
-  "you-gain-value": { label: "Leans your way", className: "text-green" },
-  "you-give-up-value": { label: "You give up a little value", className: "text-orange" },
-  "worth-the-overpay": { label: "Overpay worth making", className: "text-teal" },
+  even: { label: "Even value", className: "text-gain" },
+  "you-gain-value": { label: "Leans your way", className: "text-gain" },
+  "you-give-up-value": { label: "You give up a little value", className: "text-flag" },
+  "worth-the-overpay": { label: "Overpay worth making", className: "text-ink" },
 };
 
 export function TradePanel({ session }: { session: Session }) {
   const format = session.league.format;
   const opponents = session.teams.filter((t) => !t.isUserTeam);
+  const analysisKey = JSON.stringify({
+    format,
+    rules: Object.entries(session.ruleOverrides).sort(),
+    scoring: Object.entries(session.scoringOverrides).sort(),
+  });
   const [selected, setSelected] = useState<number | null>(opponents[0]?.rosterId ?? null);
 
   const [roster, setRoster] = useState<BoardResponse | null>(null);
@@ -38,28 +44,27 @@ export function TradePanel({ session }: { session: Session }) {
   // them change, rather than clearing it from an effect — change what you
   // asked for and the deal on screen no longer answers the question.
   const [suggestion, setSuggestion] = useState<{ key: string; data: TradeResponse } | null>(null);
-  const tradeKey = `${selected}:${format}:${JSON.stringify(intent)}`;
+  const tradeKey = `${selected}:${analysisKey}:${JSON.stringify(intent)}`;
   const trade = suggestion?.key === tradeKey ? suggestion.data : null;
 
   const rosterCache = useRef(new Map<string, BoardResponse>());
+  const activeRosterKey = useRef("");
 
   const loadRoster = useCallback(
     async (rosterId: number, fmt: ScoringFormat) => {
-      const key = `${rosterId}:${fmt}`;
+      const key = `${rosterId}:${fmt}:${analysisKey}`;
+      activeRosterKey.current = key;
       const cached = rosterCache.current.get(key);
       if (cached) {
         setRoster(cached);
+        setRosterLoading(false);
+        setError(null);
         return;
       }
 
-      // Demo mode — return pre-built roster data.
-      if (session.leagueId === "demo") {
-        const { DEMO_ROSTER_PARTNER } = await import("@/lib/demo");
-        setRoster(DEMO_ROSTER_PARTNER);
-        return;
-      }
-
+      // Every selected roster comes from the same board API as live mode.
       setRosterLoading(true);
+      setRoster(null);
       setError(null);
       try {
         const res = await fetch("/api/board", {
@@ -77,16 +82,21 @@ export function TradePanel({ session }: { session: Session }) {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Could not load that roster.");
+        if (data.team?.rosterId !== rosterId) {
+          throw new Error("The selected team did not match the returned roster.");
+        }
         rosterCache.current.set(key, data);
-        setRoster(data);
+        if (activeRosterKey.current === key) setRoster(data);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Something went wrong.");
-        setRoster(null);
+        if (activeRosterKey.current === key) {
+          setError(err instanceof Error ? err.message : "Something went wrong.");
+          setRoster(null);
+        }
       } finally {
-        setRosterLoading(false);
+        if (activeRosterKey.current === key) setRosterLoading(false);
       }
     },
-    [session],
+    [analysisKey, session],
   );
 
   useEffect(() => {
@@ -95,14 +105,9 @@ export function TradePanel({ session }: { session: Session }) {
 
   // The manager's own roster backs the "off the table" list.
   useEffect(() => {
-    if (myRoster || session.league.userTeamId === null) return;
+    if (session.league.userTeamId === null) return;
     let cancelled = false;
     void (async () => {
-      if (session.leagueId === "demo") {
-        const { DEMO_BOARD_ROSTER } = await import("@/lib/demo");
-        if (!cancelled) setMyRoster(DEMO_BOARD_ROSTER);
-        return;
-      }
       try {
         const res = await fetch("/api/board", {
           method: "POST",
@@ -126,18 +131,23 @@ export function TradePanel({ session }: { session: Session }) {
     return () => {
       cancelled = true;
     };
-  }, [session, myRoster]);
+  }, [analysisKey, session]);
+
+  function selectPartner(rosterId: number) {
+    if (rosterId === selected) return;
+    setSelected(rosterId);
+    setRoster(null);
+    setRosterLoading(true);
+    // A named target belongs to one opponent. Preserve category/protection
+    // conditions across teams, but never carry an old team's player forward.
+    setIntent((current) => ({ ...current, targetPlayerId: null }));
+    setError(null);
+  }
 
   async function suggestTrade() {
     if (selected === null || tradeLoading) return;
 
-    // Demo mode — return pre-built trade.
-    if (session.leagueId === "demo") {
-      const { DEMO_TRADE } = await import("@/lib/demo");
-      setSuggestion({ key: tradeKey, data: DEMO_TRADE });
-      return;
-    }
-
+    // The deterministic trade route owns partner selection and player ownership.
     setTradeLoading(true);
     setError(null);
     try {
@@ -156,6 +166,21 @@ export function TradePanel({ session }: { session: Session }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Could not build a trade.");
+      const expectedPartner = session.teams.find((team) => team.rosterId === selected);
+      if (data.found) {
+        if (data.partnerTeamName !== expectedPartner?.teamName) {
+          throw new Error("The selected team did not match the returned trade.");
+        }
+        if (!roster?.players.some((player) => player.playerId === data.receive.playerId)) {
+          throw new Error("The trade target was not on the displayed partner roster.");
+        }
+        if (
+          myRoster &&
+          !myRoster.players.some((player) => player.playerId === data.give.playerId)
+        ) {
+          throw new Error("The trade offer was not on your roster.");
+        }
+      }
       setSuggestion({ key: tradeKey, data: data as TradeResponse });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
@@ -166,11 +191,11 @@ export function TradePanel({ session }: { session: Session }) {
 
   if (session.league.userTeamId === null) {
     return (
-      <div className="rounded-xl border border-dashed border-edge px-8 py-14 text-center">
-        <h2 className="font-display text-xl font-semibold uppercase tracking-wide">
+      <div className="card px-8 py-14 text-center">
+        <h2 className="font-display text-xl ">
           Trades need to know your team
         </h2>
-        <p className="mx-auto mt-2.5 max-w-md text-sm leading-relaxed text-muted">
+        <p className="mx-auto mt-2.5 max-w-md text-sm leading-relaxed text-ink-2">
           Re-import this league with your Sleeper username and CourtIQ can compare your roster
           against every other team.
         </p>
@@ -182,10 +207,11 @@ export function TradePanel({ session }: { session: Session }) {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="font-display text-3xl font-bold uppercase tracking-tight">Trade desk</h1>
-        <p className="mt-1.5 text-sm text-muted">
-          Pick a team, read their roster, and let CourtIQ find the imbalance.
+      <div className="on-field">
+        <h1 className="font-display text-3xl text-chalk">Trade desk</h1>
+        <p className="mt-1.5 text-sm text-bone-2">
+          Pick a team, set optional conditions, and let the deterministic engine find a valid
+          one-for-one fit.
         </p>
       </div>
 
@@ -193,21 +219,21 @@ export function TradePanel({ session }: { session: Session }) {
         {opponents.map((t) => (
           <button
             key={t.rosterId}
-            onClick={() => setSelected(t.rosterId)}
-            className={`shrink-0 rounded-lg border px-4 py-2.5 text-left transition ${
+            onClick={() => selectPartner(t.rosterId)}
+            className={`shrink-0  border px-4 py-2.5 text-left transition ${
               selected === t.rosterId
-                ? "border-teal bg-teal/10"
-                : "border-edge bg-panel hover:border-muted/40"
+                ? "border-ink bg-gold"
+                : "border-ink bg-bone hover:bg-gold"
             }`}
           >
-            <span className="block max-w-[11rem] truncate text-sm font-medium">{t.teamName}</span>
-            <span className="block text-xs text-muted">{t.playerCount} players</span>
+            <span className="block max-w-[11rem] truncate font-display text-sm">{t.teamName}</span>
+            <span className="block text-xs text-ink-2">{t.playerCount} players</span>
           </button>
         ))}
       </div>
 
       {error && (
-        <div role="alert" className="rounded-xl border border-red/40 bg-red/10 px-6 py-5 text-sm">
+        <div role="alert" className="card border-whistle bg-whistle text-bone px-6 py-5 text-sm">
           {error}
         </div>
       )}
@@ -220,17 +246,17 @@ export function TradePanel({ session }: { session: Session }) {
             partnerRoster={roster?.players ?? []}
             partnerTeamName={selectedTeam.teamName}
             myRoster={myRoster?.players ?? []}
-            disabled={tradeLoading}
+            disabled={tradeLoading || rosterLoading}
           />
 
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <h2 className="font-display text-xl font-semibold uppercase tracking-wide">
+            <h2 className="font-display text-xl ">
               {selectedTeam.teamName}
             </h2>
             <button
               onClick={suggestTrade}
-              disabled={tradeLoading || rosterLoading}
-              className="rounded-lg bg-orange px-6 py-3 font-display text-sm font-semibold uppercase tracking-wide text-[#1a0d06] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={tradeLoading || rosterLoading || !roster}
+              className="bg-flag px-6 py-3 font-display text-sm  text-ink transition hover:bg-gold disabled:cursor-not-allowed disabled:opacity-40"
             >
               {tradeLoading
                 ? "Working the phones…"
@@ -244,26 +270,25 @@ export function TradePanel({ session }: { session: Session }) {
             <div className="space-y-6">
               {trade.found ? (
                 <>
-                  <div className="rounded-xl border border-edge bg-card p-6 sm:p-7">
+                  <div className="border-2 border-ink bg-bone-2 p-6 sm:p-7">
                     <div className="grid gap-5 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
                       <TradeSide
-                        label="You send"
+ label="You send"
                         name={trade.give.name}
-                        meta={`${trade.give.position} · ${trade.give.team}`}
+                        meta={`${trade.give.position} / ${trade.give.team}`}
                         stats={trade.give.statLine}
                         score={trade.give.scoreLabel}
                       />
                       <div
                         aria-hidden
-                        className="grid place-items-center font-display text-2xl text-muted"
+                        className="grid place-items-center font-display text-2xl text-ink-2"
                       >
-                        <span className="hidden sm:block">⇄</span>
-                        <span className="sm:hidden">↓</span>
+                        <Icon name="swap" className="h-6 w-6" />
                       </div>
                       <TradeSide
-                        label="You get"
+ label="You get"
                         name={trade.receive.name}
-                        meta={`${trade.receive.position} · ${trade.receive.team}`}
+                        meta={`${trade.receive.position} / ${trade.receive.team}`}
                         stats={trade.receive.statLine}
                         score={trade.receive.scoreLabel}
                         highlight
@@ -272,15 +297,15 @@ export function TradePanel({ session }: { session: Session }) {
 
                     {/* What the manager asked for, and whether it landed. */}
                     {trade.goalDelta.length > 0 && (
-                      <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-edge pt-5">
-                        <span className="text-xs uppercase tracking-[0.12em] text-muted">
+                      <div className="mt-6 flex flex-wrap items-center gap-2 border-t-2 border-ink pt-5">
+                        <span className="text-xs  text-ink-2">
                           You asked for
                         </span>
                         {trade.goalDelta.map((g) => (
                           <span
                             key={g.key}
-                            className={`nums rounded-md px-2 py-0.5 text-xs font-medium ${
-                              g.delta >= 0 ? "bg-green/10 text-green" : "bg-red/10 text-red"
+                            className={`nums  px-2 py-0.5 text-xs font-medium ${
+                              g.delta >= 0 ? "bg-green/10 text-gain" : "bg-red/10 text-whistle"
                             }`}
                           >
                             {g.label} {g.delta >= 0 ? "+" : ""}
@@ -291,10 +316,10 @@ export function TradePanel({ session }: { session: Session }) {
                     )}
 
                     <div
-                      className={`flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-muted ${
+                      className={`flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-ink-2 ${
                         trade.goalDelta.length > 0
                           ? "mt-4"
-                          : "mt-6 border-t border-edge pt-5"
+                          : "mt-6 border-t-2 border-ink pt-5"
                       }`}
                     >
                       {trade.userNeed && trade.partnerNeed && (
@@ -313,7 +338,7 @@ export function TradePanel({ session }: { session: Session }) {
                       </span>
                     </div>
 
-                    <p className="mt-4 border-t border-edge pt-4 text-xs leading-relaxed text-muted">
+                    <p className="mt-4 border-t-2 border-ink pt-4 text-xs leading-relaxed text-ink-2">
                       {trade.rationale}
                     </p>
                   </div>
@@ -321,11 +346,11 @@ export function TradePanel({ session }: { session: Session }) {
                   <PersonaCallout commentary={trade.commentary} />
                 </>
               ) : (
-                <div className="rounded-xl border border-dashed border-edge px-8 py-12 text-center">
-                  <h3 className="font-display text-lg font-semibold uppercase tracking-wide">
+                <div className="card px-8 py-12 text-center">
+                  <h3 className="font-display text-lg ">
                     No trade worth making
                   </h3>
-                  <p className="mx-auto mt-2.5 max-w-md text-sm leading-relaxed text-muted">
+                  <p className="mx-auto mt-2.5 max-w-md text-sm leading-relaxed text-ink-2">
                     {trade.reason}
                   </p>
                 </div>
@@ -334,7 +359,7 @@ export function TradePanel({ session }: { session: Session }) {
           )}
 
           {rosterLoading ? (
-            <div className="h-64 animate-pulse rounded-xl border border-edge bg-panel" />
+            <div className="h-64 animate-pulse card" />
           ) : roster && roster.players.length > 0 ? (
             <PlayerList cards={roster.players} format={format} />
           ) : null}
@@ -362,14 +387,14 @@ function TradeSide({
   return (
     <div>
       <p
-        className={`text-xs uppercase tracking-[0.15em] ${highlight ? "text-teal" : "text-muted"}`}
+        className={`text-xs uppercase tracking-[0.15em] ${highlight ? "text-ink" : "text-ink-2"}`}
       >
         {label}
       </p>
-      <p className="mt-2 font-display text-2xl font-bold uppercase tracking-tight">{name}</p>
-      <p className="mt-1 text-sm text-muted">{meta}</p>
-      <p className="nums mt-3 text-xs text-muted">{stats}</p>
-      <p className="nums mt-2 font-display text-lg font-semibold text-teal">{score}</p>
+      <p className="mt-2 font-display text-2xl ">{name}</p>
+      <p className="mt-1 text-sm text-ink-2">{meta}</p>
+      <p className="nums mt-3 text-xs text-ink-2">{stats}</p>
+      <p className="nums mt-2 font-display text-lg font-semibold text-ink">{score}</p>
     </div>
   );
 }

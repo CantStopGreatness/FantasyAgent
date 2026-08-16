@@ -1,24 +1,27 @@
 import "server-only";
-import Anthropic from "@anthropic-ai/sdk";
+import { narrationCacheKey } from "./cache";
 
 /**
  * The CourtIQ analyst voice.
  *
  * The model narrates; it never ranks. Every number in the prompt comes from
- * the deterministic scoring engine, and the model is told not to invent more —
+ * the deterministic scoring engine, and the model is told not to invent more -
  * a made-up stat on stage is worse than a boring sentence.
  *
  * The sport noun is injected so the persona is not hard-coded to basketball.
  */
 function systemPrompt(sportNoun: string): string {
-  return `You are CourtIQ, a confident fantasy ${sportNoun} analyst with hype-man energy, the voice of someone who called this pick two weeks ago and is enjoying being right.
+  return `You are CourtIQ, a concise and knowledgeable fantasy ${sportNoun} analyst.
+You narrate a result already computed by CourtIQ's deterministic engine. You did not perform an independent ranking or selection.
 
 Rules:
-- 1-3 punchy sentences. No preamble, no "Here's why", open on the take.
-- You are given the numbers and the league's rules. Use them, and never invent a stat, date, injury, trade, or storyline you were not given.
-- League context is there to sharpen the call, a pickup right before the trade deadline is a different argument than one in week 3. Reference it only when it genuinely changes the advice.
-- Confident and playful about the *pick*, never disrespectful toward the real athlete. Tease the roster move, not the person.
-- Never hedge with "might", "could be worth a look", or "if he stays healthy". Make the call.
+- Write 1-3 short sentences. No preamble; open on the supplied result.
+- Explain why the supplied deterministic recommendation makes sense.
+- Use only facts explicitly supplied in the user message. Never invent or infer schedules, injuries, ownership, matchup strength, category needs, projections, win probabilities, statistics, dates, trades, or storylines.
+- Treat the computed recommendation as fixed: never override it, rerank anyone, suggest a different pickup or sleeper, or select a different trade.
+- Be confident about the computed comparison, but do not promise real-world outcomes.
+- Reference league context only when a supplied rule materially supports the explanation.
+- Be lively but respectful toward real athletes.
 - Plain text only. No markdown, no emoji, no bullet points.`;
 }
 
@@ -34,81 +37,115 @@ function renderContext(ctx: LeagueContext): string {
   return `League rules:\n${ctx.rules.map((r) => `- ${r}`).join("\n")}\n\n`;
 }
 
-const MODEL = "claude-opus-5";
+const PROVIDER = "ollama-cloud";
+const DEFAULT_MODEL = "gpt-oss:20b";
+const DEFAULT_BASE_URL = "https://ollama.com/api";
+export const OLLAMA_TIMEOUT_MS = 10_000;
+const CACHE_TTL_MS = 10 * 60 * 1000;
+const MAX_CACHE = 200;
+const MAX_GENERATIONS_PER_MINUTE = 30;
 
-/** Persona output is decoration on top of real rankings — it must never block a render. */
 export type PersonaResult = {
   text: string;
-  /** True when the line came from the local fallback rather than the model. */
   fallback: boolean;
 };
 
-let client: Anthropic | null = null;
-function getClient(): Anthropic | null {
-  if (!process.env.ANTHROPIC_API_KEY) return null;
-  if (!client) client = new Anthropic();
-  return client;
+function ollamaConfig() {
+  return {
+    apiKey: process.env.OLLAMA_API_KEY?.trim() || null,
+    model: process.env.OLLAMA_MODEL?.trim() || DEFAULT_MODEL,
+    baseUrl: (process.env.OLLAMA_BASE_URL?.trim() || DEFAULT_BASE_URL).replace(/\/+$/, ""),
+  };
 }
 
-/**
- * Identical inputs produce identical commentary, so cache them.
- *
- * This matters for the format toggle specifically: flipping back and forth
- * between 9-CAT and Points during a demo should not re-bill or re-wait for a
- * line the user already read.
- */
-const cache = new Map<string, string>();
-const MAX_CACHE = 200;
+function assistantContent(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+  const message = (value as { message?: unknown }).message;
+  if (!message || typeof message !== "object") return null;
+  const { role, content } = message as { role?: unknown; content?: unknown };
+  if (role !== "assistant" || typeof content !== "string") return null;
+  return content.trim() || null;
+}
 
-async function generate(
-  cacheKey: string,
+const cache = new Map<string, { text: string; expiresAt: number }>();
+const inFlight = new Map<string, Promise<PersonaResult>>();
+let generationTimes: number[] = [];
+
+function canGenerate(): boolean {
+  const now = Date.now();
+  generationTimes = generationTimes.filter((at) => now - at < 60_000);
+  if (generationTimes.length >= MAX_GENERATIONS_PER_MINUTE) return false;
+  generationTimes.push(now);
+  return true;
+}
+
+async function generateNarration(
+  identity: unknown,
   league: LeagueContext,
   prompt: string,
   fallback: string,
 ): Promise<PersonaResult> {
+  const config = ollamaConfig();
+  if (!config.apiKey) return { text: fallback, fallback: true };
+
+  const cacheKey = narrationCacheKey({
+    provider: PROVIDER,
+    model: config.model,
+    identity,
+    league,
+    prompt,
+  });
   const hit = cache.get(cacheKey);
-  if (hit) return { text: hit, fallback: false };
+  if (hit && hit.expiresAt > Date.now()) return { text: hit.text, fallback: false };
+  if (hit) cache.delete(cacheKey);
 
-  const anthropic = getClient();
-  if (!anthropic) return { text: fallback, fallback: true };
+  const pending = inFlight.get(cacheKey);
+  if (pending) return pending;
 
+  const operation = (async (): Promise<PersonaResult> => {
+    if (!canGenerate()) return { text: fallback, fallback: true };
+
+    try {
+      const response = await fetch(config.baseUrl + "/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + config.apiKey,
+        },
+        body: JSON.stringify({
+          model: config.model,
+          messages: [
+            { role: "system", content: systemPrompt(league.sportNoun) },
+            { role: "user", content: renderContext(league) + prompt },
+          ],
+          stream: false,
+          think: "low",
+          options: { num_predict: 384, temperature: 0.2 },
+        }),
+        signal: AbortSignal.timeout(OLLAMA_TIMEOUT_MS),
+      });
+      if (!response.ok) return { text: fallback, fallback: true };
+
+      const text = assistantContent(await response.json());
+      if (!text) return { text: fallback, fallback: true };
+      if (cache.size >= MAX_CACHE) {
+        const oldest = cache.keys().next().value;
+        if (oldest) cache.delete(oldest);
+      }
+      cache.set(cacheKey, { text, expiresAt: Date.now() + CACHE_TTL_MS });
+      return { text, fallback: false };
+    } catch {
+      return { text: fallback, fallback: true };
+    }
+  })();
+
+  inFlight.set(cacheKey, operation);
   try {
-    const message = await anthropic.beta.messages.create({
-      model: MODEL,
-      max_tokens: 2048,
-      system: systemPrompt(league.sportNoun),
-      // Short narration task — low effort keeps the demo snappy. Thinking stays
-      // on (the Opus 5 default) rather than disabled, which can leak internal
-      // tags into visible text.
-      output_config: { effort: "low" },
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
-      messages: [{ role: "user", content: renderContext(league) + prompt }],
-    });
-
-    if (message.stop_reason === "refusal") return { text: fallback, fallback: true };
-
-    const text = message.content
-      .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join(" ")
-      .trim();
-
-    if (!text) return { text: fallback, fallback: true };
-
-    if (cache.size >= MAX_CACHE) cache.clear();
-    cache.set(cacheKey, text);
-    return { text, fallback: false };
-  } catch {
-    // Rate limit, network blip, missing credit — the dashboard still renders.
-    return { text: fallback, fallback: true };
+    return await operation;
+  } finally {
+    inFlight.delete(cacheKey);
   }
 }
-
-/* ── Prompt builders ─────────────────────────────────────────────────────
- * Each takes the scoring engine's structured output and renders it as facts.
- */
-
 export type WaiverBrief = {
   name: string;
   position: string;
@@ -144,11 +181,11 @@ export async function waiverCommentary(
   lines.push(`Sell this pickup to the manager.`);
 
   const fallback =
-    `${brief.name} is the best name sitting on your waiver wire and it is not close. ` +
-    `${brief.statLine} with ${brief.strengths}, in a ${formatName} league that is a starter, not a stash.`;
+    `${brief.name} ranks first among the available players in this analysis. ` +
+    `${brief.statLine} with ${brief.strengths}; that is the deterministic case in this ${formatName} format.`;
 
-  return generate(
-    `waiver:${brief.format}:${brief.name}:${brief.rank}`,
+  return generateNarration(
+    { type: "waiver", brief },
     league,
     lines.join("\n"),
     fallback,
@@ -172,14 +209,14 @@ export async function sleeperCommentary(
     `Breakout candidate: ${brief.name}, ${brief.position}, ${brief.team}.`,
     `Why he is trending up: ${brief.reason}.`,
     `Per game: ${brief.statLine}.`,
-    `Tell the manager to grab him before the rest of the league notices.`,
+    `Explain why the supplied breakout-candidate rationale supports the result.`,
   ].join("\n");
 
   const fallback =
-    `${brief.name} is the one nobody in your league has looked at yet. ${brief.reason}. ` +
-    `Add him now and let everyone else figure it out next week.`;
+    `${brief.name} stands out in the sleeper model. ${brief.reason}. ` +
+    `Review the player card and decide whether the available upside fits your roster.`;
 
-  return generate(`sleeper:${brief.format}:${brief.name}`, league, prompt, fallback);
+  return generateNarration({ type: "sleeper", brief }, league, prompt, fallback);
 }
 
 export type TradeBrief = {
@@ -196,11 +233,11 @@ export type TradeBrief = {
   format: "category" | "points";
   fairness: "even" | "you-give-up-value" | "you-gain-value" | "worth-the-overpay";
   /** The engine's one-line explanation of why this pair was picked. */
-  rationale: string;
+  rationale?: string;
   /** Movement in the categories the manager asked to improve. */
-  goalDelta: { key: string; label: string; delta: number }[];
+  goalDelta?: { key: string; label: string; delta: number }[];
   /** True when the manager named the player they wanted. */
-  targeted: boolean;
+  targeted?: boolean;
 };
 
 export async function tradeCommentary(
@@ -215,20 +252,23 @@ export async function tradeCommentary(
       "This costs a little value on paper, and it is worth it for what the manager asked for.",
   }[brief.fairness];
 
+  const rationale = brief.rationale?.trim() || null;
+  const goalDelta = brief.goalDelta ?? [];
+  const targeted = brief.targeted ?? false;
   const lines = [
     `Trade partner: ${brief.partnerTeamName}.`,
     `The manager sends: ${brief.giveName}, ${brief.givePosition} — ${brief.giveStats}.`,
     `The manager receives: ${brief.receiveName}, ${brief.receivePosition} — ${brief.receiveStats}.`,
-    `Why this pair: ${brief.rationale}`,
   ];
 
-  if (brief.targeted) {
+  if (rationale) lines.push(`Why this pair: ${rationale}`);
+  if (targeted) {
     lines.push(
       `The manager specifically asked for ${brief.receiveName}, so this is about landing him at a price that works.`,
     );
   }
-  if (brief.goalDelta.length) {
-    const moves = brief.goalDelta
+  if (goalDelta.length) {
+    const moves = goalDelta
       .map((g) => `${g.label} ${g.delta >= 0 ? "+" : ""}${g.delta.toFixed(1)} z`)
       .join(", ");
     lines.push(`The manager asked to improve: ${moves}. Lead with whether that actually lands.`);
@@ -240,21 +280,24 @@ export async function tradeCommentary(
   }
   lines.push(fairnessNote, `Pitch this trade.`);
 
-  const goalPhrase = brief.goalDelta.length
-    ? `It moves ${brief.goalDelta.map((g) => g.label).join(" and ")} in the right direction`
+  const goalPhrase = goalDelta.length
+    ? `It improves ${goalDelta.map((g) => g.label).join(" and ")} by the deterministic category comparison`
+    : targeted
+      ? `This is the closest deterministic value match for ${brief.receiveName}`
     : brief.userNeed && brief.partnerNeed
-      ? `You are starving at ${brief.userNeed} and ${brief.partnerTeamName} has the opposite problem`
-      : `It is the cleanest match in value on the board`;
+      ? `This addresses your need at ${brief.userNeed} and ${brief.partnerTeamName}'s need at ${brief.partnerNeed}`
+      : `This is the closest deterministic value match on the board`;
 
   const fallback =
-    `${goalPhrase}. Send ${brief.giveName}, get ${brief.receiveName}, and both rosters stop bleeding. ` +
-    `That is how you win a trade without winning a trade.`;
+    `${goalPhrase}. Send ${brief.giveName} and receive ${brief.receiveName}. ${fairnessNote}`;
 
   // The conditions are part of the identity of the pitch — the same swap
   // argued for rebounds should not reuse a line written without a goal.
-  const goalKey = brief.goalDelta.map((g) => g.key).join("+");
-  return generate(
-    `trade:${brief.format}:${brief.giveName}:${brief.receiveName}:${goalKey}:${brief.targeted}`,
+  return generateNarration(
+    {
+      type: "trade",
+      brief: { ...brief, rationale, goalDelta, targeted },
+    },
     league,
     lines.join("\n"),
     fallback,

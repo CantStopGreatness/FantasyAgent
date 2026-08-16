@@ -1,140 +1,119 @@
 # CourtIQ
 
-League-aware fantasy recommendations. CourtIQ reads your Sleeper league — its
-scoring format, playoff dates, trade deadline, waiver rules — and ranks every
-waiver pickup, sleeper, and trade against them, then explains the call in an
-analyst's voice.
+**League-specific NBA fantasy analysis from a public Sleeper league—deterministic scoring first, optional Ollama Cloud narration second.**
 
-**The format is the league's, not a setting.** There is no scoring toggle: the
-format is read from the league and shown as a badge. Setup asks you to confirm
-it, because Sleeper publishes no category-vs-points flag and our read of it is
-an inference.
+Built for **PeddieHacks 2026 · Sports track**.
 
-What stays visible is the *reason* a ranking looks the way it does. Giannis
-Antetokounmpo is the 69th most valuable player under category scoring and the
-5th under points, because his free-throw shooting carries a −5.6 z-score at
-high volume — so his card says so, whichever format your league uses.
+CourtIQ exists because a generic player list cannot answer a league-specific question: does this available player help under *this* league's scoring? CourtIQ imports a public Sleeper NBA league, interprets the supported scoring setup, removes players already rostered in that league, and produces deterministic ranked boards and a constrained one-for-one trade candidate.
 
-## Running it
+No live deployment, video, or verified product screenshot is included in this repository.
+
+## What CourtIQ does
+
+- Imports a public **Sleeper NBA** league by league ID or Sleeper username.
+- Resolves a username to the user's current NBA leagues and identifies that user's roster when available.
+- Reads league rosters, player availability, scoring settings, and selected league settings from Sleeper.
+- Scores active, fantasy-relevant NBA players deterministically:
+  - **Points:** applies each supported imported Sleeper point value to normalized per-game player rates.
+  - **Categories:** computes a summed z-score across the NBA profile's nine categories; turnovers are inverted and FG%/FT% use volume-weighted impact rather than raw percentage.
+- Shows the active-format ranking alongside a comparison rank in the other implemented format.
+- Filters the waiver and sleeper pools to active players who are not rostered in the imported league.
+- Builds sleeper lists from available-player scoring plus recent-form, Sleeper add-activity, per-36, and age signals.
+- Suggests at most one deterministic, one-for-one trade for a selected opponent using NBA position-group depth and closest computed value outside each side's top player at that group.
+- Uses Ollama Cloud only for optional narration. A deterministic fallback narration keeps the app usable with no API key, a timeout, or an API failure.
+
+## Architecture
+
+```mermaid
+flowchart LR
+  S[Sleeper public API] --> N[League snapshot & NBA profile normalization]
+  N --> D[Deterministic scoring, availability, sleeper & trade engine]
+  D --> R[Ranked boards and trade result]
+  R --> C{OLLAMA_API_KEY set?}
+  C -- Yes --> A[Optional Ollama Cloud narration]
+  C -- No / failure --> F[Deterministic fallback narration]
+  A --> U[Next.js UI]
+  F --> U
+  R --> U
+```
+
+Ollama Cloud receives a structured narration brief containing deterministic engine output and league context. It does **not** rank players, choose a waiver pickup, choose a sleeper, choose a trade, fetch stats, or change deterministic results.
+
+Narration runs only in the Node.js API routes and calls Ollama Cloud over outbound HTTPS. Requests use a 10-second timeout, a 10-minute/200-entry in-memory cache with request coalescing, and a process-local limit of 30 new generations per minute. Those cache and rate controls are intentionally per serverless instance; deterministic results and local fallback copy remain available when a generation is refused or fails.
+
+## Scoring coverage and limitations
+
+### Supported today
+
+CourtIQ supports Sleeper NBA imports and the NBA profile's player-rate fields. In a points league, only imported scoring keys with a declared normalized NBA rate are used in the calculation; unsupported keys remain visible in setup as **excluded**. Editing a supported point value re-scores the boards. League format is inferred from the scoring map and can be corrected during setup because Sleeper does not provide a definitive category-versus-points flag.
+
+The category model is a fixed NBA nine-category interpretation: points, rebounds, assists, steals, blocks, three-pointers made, turnovers, FG%, and FT%. It is not a claim that every imported league uses identical category rules.
+
+### Current limitations
+
+- **NBA and Sleeper only.** Other sports and fantasy providers are not supported by the product.
+- **Unsupported imported point keys are excluded** from rankings rather than approximated; setup displays the coverage explicitly.
+- **Stats freshness follows Sleeper's season data.** Player dictionaries, season totals, weekly files, and add trends are cached for up to 24 hours. During an offseason, CourtIQ uses the previous completed season if the current season has no played games.
+- **Recent form is relative, not a fabricated per-game split.** Sleeper weekly files do not provide games played, so CourtIQ compares late-season file output with the player's season file output.
+- **Trades are one-for-one only.** The engine uses top-three positional-group strength and complementary group counts/value; it does not model multi-player packages, schedule, matchup softness, or category-by-category roster needs.
+- **No schedule or matchup analysis.** CourtIQ does not calculate home games, opponent strength, or matchup softness.
+- **No ownership percentage.** Sleeper add activity is used as a league-wide buzz signal; it is not ownership data.
+- **Category format requires confirmation.** Its initial points/category read is a best-effort inference from undocumented Sleeper scoring settings.
+
+## Quick start
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open the printed URL, enter a Sleeper username (or a league ID), confirm the
-rules it read, and go.
+Open the local URL printed by Next.js. Import a public Sleeper NBA league by username or league ID, review the inferred scoring format and supported scoring coverage, then continue to the dashboard.
 
-No API key is required to run the app. Add one to unlock live analyst
-commentary:
+## Environment variables
 
-```bash
-cp .env.example .env.local   # then set ANTHROPIC_API_KEY
-```
-
-Without a key every callout falls back to a written line and is labelled
-"offline read" in the UI, so the app never breaks on a missing or rate-limited
-credential.
-
-## Verifying
+Copy the tracked template if you want optional Ollama Cloud narration:
 
 ```bash
-npm run verify         # scoring engine: inverted categories, format divergence
-npm run verify:league  # full pipeline against a synthetic league
+cp .env.example .env.local
 ```
 
-Both run against live Sleeper data (cached to `.cache/`). `verify` is the guard
-on the demo-critical behaviour — it fails the build if the two formats stop
-disagreeing.
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `OLLAMA_API_KEY` | No | Enables Ollama Cloud narration only. Without it, CourtIQ uses deterministic fallback narration and remains functional. |
+| `OLLAMA_MODEL` | No | Ollama model name. Defaults to `gpt-oss:20b`; set `gpt-oss:120b` without changing code. |
+| `OLLAMA_BASE_URL` | No | Server-side Ollama API base URL. Defaults to `https://ollama.com/api`. |
 
-## Sports
+Never commit a real key. `.env*` files remain ignored, while `.env.example` is intentionally trackable.
+On Vercel, set `OLLAMA_API_KEY` as a server-side environment variable. Do not use a `NEXT_PUBLIC_` variable for the key.
 
-NBA is the only scoring profile implemented, but nothing above the profile
-layer assumes basketball. A sport is defined in one file (`src/lib/sports/`):
-its categories, which of them invert, which are volume-weighted ratios, its
-position groups, and how to turn a Sleeper stat line into per-game rates. The
-engine in `src/lib/engine/` is sport-agnostic.
+## Verification
 
-Sleeper serves `players` and `stats` for `nfl`, `nhl`, `mlb`, `ncaaf`, and
-`ncaab` — all verified reachable — so adding one is a profile file, not a
-rewrite. Importing a league for a sport with no profile is refused rather than
-guessed at.
+```bash
+npm run lint
+npx tsc --noEmit
+npm run build
+npm run verify
+npm run verify:league
+```
 
-Note that category scoring is itself sport-specific: NFL is points-only, which
-is why `supportsCategories` lives on the profile rather than being assumed.
+Additional focused checks available in this repository:
 
-## Data
+```bash
+npm run verify:scoring
+npm run verify:reliability
+npm run verify:demo
+```
 
-Everything comes from the public Sleeper API. No key, no second provider.
+The verification scripts exercise scoring divergence, turnover inversion, supported-key handling, category ratio treatment, availability filtering, league pipeline behavior, deterministic trades, and reliability safeguards.
 
-| What | Endpoint |
-| --- | --- |
-| League, rosters, managers | `/v1/league/{id}`, `/rosters`, `/users` |
-| Player dictionary | `/v1/players/{sport}` (2.4 MB — trimmed and cached for a day) |
-| Season stat totals | `/v1/stats/{sport}/regular/{season}` |
-| Late-season splits | `/v1/stats/{sport}/regular/{season}/{week}` |
-| Add velocity | `/v1/players/{sport}/trending/add` |
+## Sleeper data, cache, and freshness
 
-Two things worth knowing about this data:
+CourtIQ uses the public Sleeper API—no Sleeper credential or second data provider is required. It reads league, roster, user, player dictionary, regular-season stats, weekly stats, and trending-add endpoints. The app keeps an in-process and disk cache in `.cache/`; `.cache/` is regenerated on demand and is ignored by Git. Network requests time out defensively, and missing/failed narration falls back locally.
 
-**Offseason.** Sleeper's current season may have no games played yet, so the
-engine falls back to the previous completed season and the UI says which season
-the numbers come from.
+## Contributors
 
-**League settings are undocumented.** Sleeper publishes no schema for the
-`settings` object, so `src/lib/engine/settings.ts` labels the keys it knows and
-passes unknown ones through untouched. A setting the league did not set renders
-as absent rather than as a fabricated default — a wrong trade deadline is worse
-than no trade deadline. The snapshot endpoint returns the raw object alongside
-the parsed one so the label table can be reconciled against a real league.
+Contributor roles are not documented in the repository, so this README does not infer them. Use the Git history for authorship.
 
-**Weekly splits are not per-game.** A weekly file is a partial-week aggregate
-covering an unknown number of games, with no `gp` field — summing all 25 weeks
-recovers only ~30% of a player's season totals. Treating one file as one game
-inflates every rate (a 16.8 MPG bench player reads as 37 MPG). So recent form
-is expressed as a player's late-season output *per file* against their own
-season-long output *per file*: the same unknown unit on both sides, reported as
-a relative change rather than a fabricated per-game number.
+## What's next
 
-## How the scoring works
-
-**Points** — each per-game stat weighted by the league's own point values, read
-straight from Sleeper's `scoring_settings`.
-
-**Categories** — a z-score per category against a fantasy-relevant player pool
-(≥15 GP, ≥14 MPG for NBA), summed. Two details matter, and both are declared on
-the sport profile rather than hard-coded:
-
-- **Inverted categories** score in reverse, so fewer turnovers is better.
-- **FG% and FT% are volume-weighted**, scored as the swing a player applies to
-  the pool baseline rather than as a raw percentage — otherwise a bench big
-  shooting 70% on three attempts outranks a starter shooting 52% on twenty.
-
-The normalization pool matters more than it looks: z-scores against all ~1800
-players who logged a minute would drag the means toward deep-bench production
-and inflate everyone. Filtering to real contributors keeps a replacement-level
-pickup near zero.
-
-## Trades
-
-Selection is deterministic, so the same league always yields the same trade and
-the reasoning is explainable on stage:
-
-1. Score each roster's position groups (guard / forward / center for NBA, as
-   declared by the sport profile) on their top three.
-2. Find each side's weakest group.
-3. Require the needs to be complementary — I'm thin where they're deep, and
-   vice versa — otherwise report no trade rather than invent one.
-4. From each side's surplus, skip the best player at that position (nobody
-   trades him) and pick the closest-value pair.
-
-The model writes the pitch. It never picks the trade.
-
-## Stack
-
-Next.js 16 (App Router) · React 19 · Tailwind v4 · Anthropic API (`claude-opus-5`)
-
-The analyst is given the league's rules as context — format, playoff week,
-trade deadline, waiver type — so a pickup before the deadline reads differently
-from the same pickup in week 3. It narrates; it never ranks, and it is told
-never to state a number it was not given.
+Potential follow-up work, not current functionality: broader scoring-profile coverage, multi-player trade construction, and schedule/matchup analysis.

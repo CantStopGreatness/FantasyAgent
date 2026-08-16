@@ -32,6 +32,19 @@ export type PositionGroupDef = {
 };
 
 /**
+ * One points-league scoring key CourtIQ can evaluate exactly.
+ *
+ * rateKey names the normalized per-game value placed on PlayerRates.
+ * Keeping this mapping in the sport profile makes support an engine contract,
+ * rather than an assumption made independently by the scorer and UI.
+ */
+export type PointScoringDef = {
+  key: string;
+  label: string;
+  rateKey: string;
+};
+
+/**
  * Everything the engine needs to know about a sport.
  *
  * The math around these — z-scores, weighted points, positional imbalance —
@@ -49,6 +62,8 @@ export type SportProfile = {
    */
   supportsCategories: boolean;
   categories: CategoryDef[];
+  /** Imported points-scoring keys backed by exact upstream player stats. */
+  pointsScoring: PointScoringDef[];
   /** Convert one Sleeper stat line into per-game rates, or null if unusable. */
   toRates: (playerId: string, line: SleeperStatLine) => PlayerRates | null;
   positionGroups: PositionGroupDef[];
@@ -76,15 +91,47 @@ export function rateOf(rates: PlayerRates, key: string): number {
   return typeof v === "number" && isFinite(v) ? v : 0;
 }
 
+/** The declared scoring definition for an imported key, if CourtIQ supports it. */
+export function pointScoringDef(
+  profile: SportProfile,
+  key: string,
+): PointScoringDef | null {
+  return profile.pointsScoring.find((stat) => stat.key === key) ?? null;
+}
+
+export function isScoringKeySupported(profile: SportProfile, key: string): boolean {
+  return pointScoringDef(profile, key) !== null;
+}
+
 /**
- * Turn every numeric stat Sleeper reports into a per-game rate.
+ * Read the normalized rate promised by the sport profile.
  *
- * Enumerating the stats we expect is how a points league silently loses
- * points: a real league scores double-doubles, triple-doubles, technicals and
- * 40-point bonuses, and any key the profile forgot is scored as zero rather
- * than flagged. Passing everything through means whatever a league puts in its
- * scoring_settings resolves against a real number — and a new sport's keys
- * work without touching this file.
+ * Unsupported keys return null. A declared key with no numeric rate is a
+ * broken profile and throws instead of silently behaving like a zero.
+ */
+export function pointScoringRate(
+  profile: SportProfile,
+  rates: PlayerRates,
+  key: string,
+): number | null {
+  const def = pointScoringDef(profile, key);
+  if (!def) return null;
+
+  const value = rates[def.rateKey];
+  if (typeof value !== "number" || !isFinite(value)) {
+    throw new Error(
+      'Supported scoring key "' + key + '" has no numeric player rate "' + def.rateKey + '"',
+    );
+  }
+  return value;
+}
+
+/**
+ * Preserve every numeric stat Sleeper reports as a per-game rate.
+ *
+ * This keeps upstream data available for sport-specific profile logic without
+ * equating presence with support. A profile's pointsScoring declarations
+ * remain the authority for which imported league settings affect rankings.
  *
  * `gp` is the divisor and `sp` is seconds of playing time, so both are handled
  * by the caller rather than divided blindly.

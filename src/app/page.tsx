@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/Icon";
+import { FootballThrow, HoopShot } from "@/components/PixelScenes";
 import { DEMO_SESSION } from "@/lib/demo-session";
 import { saveSession } from "@/lib/types";
 
@@ -70,8 +71,17 @@ export default function Landing() {
             </div>
           </div>
 
-          <StatSheet />
+          <div>
+            <StatSheet />
+            {/* The shot loop fills the column's tail with the product's own
+                subject rather than empty ground. */}
+            <HoopShot className="mt-8 hidden lg:block" />
+          </div>
         </div>
+
+        {/* Not only basketball: the engine is sport-agnostic, and the football
+            says so before the roadmap has to. */}
+        <FootballThrow className="mt-10 h-[44px] w-full" />
 
         <Ledger />
 

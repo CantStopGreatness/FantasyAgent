@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Icon } from "@/components/Icon";
+import { DribbleLoader } from "@/components/PixelScenes";
 import { LeagueBadge } from "@/components/LeagueBadge";
 import { PersonaCallout } from "@/components/PersonaCallout";
 import { HeroCard, PlayerList } from "@/components/PlayerCards";
@@ -337,8 +338,10 @@ function BoardView({
 
 function BoardSkeleton() {
   return (
-    <div className="space-y-6" aria-hidden>
-      <div className="card h-24 animate-pulse bg-bone-2" />
+    <div className="space-y-6">
+      <div className="card flex items-center px-5 py-4">
+        <DribbleLoader label="Reading the board…" />
+      </div>
       <div className="card h-36 animate-pulse bg-bone-2" />
       <div className="card overflow-hidden">
         {Array.from({ length: 6 }).map((_, i) => (

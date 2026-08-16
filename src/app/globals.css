@@ -27,8 +27,11 @@
   --gold: #f0b429;
   --whistle: #c0182f;
   --gain: #1b7a48;
+  --leather: #a95f30;
 
   --rule: 3px;
+  /* One pixel of sprite art, and the grain size everything else dithers on. */
+  --px: 4px;
 }
 
 @theme inline {
@@ -64,17 +67,46 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Yard lines. Fixed so the field reads as ground the content sits on top of,
-   rather than a texture that scrolls with the panels. */
+/* The field.
+ *
+ * Four layers rather than one flat green, so the ground has grain the way a
+ * mowed pitch does: a hard checkerboard dither at the pixel grid, a finer
+ * offset dither to break the checker's regularity, mow stripes, and the yard
+ * lines on top. Fixed attachment keeps it reading as ground the panels sit on
+ * rather than a texture that slides with them.
+ */
 .turf {
   background-color: var(--field);
-  background-image: repeating-linear-gradient(
-    90deg,
-    transparent 0,
-    transparent 5.5rem,
-    color-mix(in oklab, var(--field-line) 55%, transparent) 5.5rem,
-    color-mix(in oklab, var(--field-line) 55%, transparent) calc(5.5rem + 2px)
-  );
+  background-image:
+    /* yard lines */
+    repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent 5.5rem,
+      color-mix(in oklab, var(--field-line) 60%, transparent) 5.5rem,
+      color-mix(in oklab, var(--field-line) 60%, transparent) calc(5.5rem + var(--px))
+    ),
+    /* mow stripes */
+    repeating-linear-gradient(
+      90deg,
+      color-mix(in oklab, var(--field-deep) 22%, transparent) 0 88px,
+      transparent 88px 176px
+    ),
+    /* fine offset dither */
+    repeating-conic-gradient(
+      color-mix(in oklab, var(--field-deep) 30%, transparent) 0% 25%,
+      transparent 0% 50%
+    ),
+    /* coarse checker dither */
+    repeating-conic-gradient(
+      color-mix(in oklab, var(--field-line) 26%, transparent) 0% 25%,
+      transparent 0% 50%
+    );
+  background-size:
+    auto,
+    auto,
+    calc(var(--px) * 2) calc(var(--px) * 2),
+    calc(var(--px) * 4) calc(var(--px) * 4);
   background-attachment: fixed;
 }
 
@@ -92,15 +124,28 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* The world's one primitive: bone stock, hard-ruled. */
+/* The world's one primitive: bone stock, hard-ruled.
+   The faint checker keeps a large panel from reading as flat digital fill —
+   it is printed stock, not poured colour. Set as longhand because the
+   `background` shorthand would reset the image. */
 .card {
-  background: var(--bone);
+  background-color: var(--bone);
+  background-image: repeating-conic-gradient(
+    color-mix(in oklab, var(--bone-3) 38%, transparent) 0% 25%,
+    transparent 0% 50%
+  );
+  background-size: calc(var(--px) * 2) calc(var(--px) * 2);
   border: var(--rule) solid var(--ink);
 }
 
-/* A scoreboard strip — ink ground, chalk lettering. */
+/* A scoreboard strip — ink ground, chalk lettering, faint scanline. */
 .strip {
-  background: var(--ink);
+  background-color: var(--ink);
+  background-image: repeating-linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.055) 0 1px,
+    transparent 1px 3px
+  );
   color: var(--bone);
 }
 
@@ -135,6 +180,91 @@ body {
 
 .deal {
   animation: deal 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ── Sprite loops ─────────────────────────────────────────────────────────
+ * Quantised with steps() so movement lands frame to frame like a sprite game
+ * rather than gliding. Each scene pauses when it leaves the viewport.
+ */
+.pixel-scene[data-running="false"] * {
+  animation-play-state: paused;
+}
+
+/* A shot: up off the hand, over the top, down through the net, gone. */
+@keyframes shot-arc {
+  0% {
+    transform: translate(0, 116px);
+    opacity: 0;
+  }
+  6%,
+  76% {
+    opacity: 1;
+  }
+  42% {
+    transform: translate(108px, -8px);
+  }
+  60% {
+    transform: translate(172px, 40px);
+  }
+  72% {
+    transform: translate(180px, 86px);
+  }
+  84% {
+    transform: translate(182px, 146px);
+    opacity: 0;
+  }
+  100% {
+    transform: translate(0, 116px);
+    opacity: 0;
+  }
+}
+
+.ball-shot {
+  animation: shot-arc 3.2s steps(11, end) infinite;
+}
+
+/* A thrown ball spirals across and off the far side. */
+@keyframes throw-across {
+  0% {
+    transform: translateX(-14%) rotate(0deg);
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(1200%) rotate(1080deg);
+    opacity: 0;
+  }
+}
+
+.ball-throw {
+  animation: throw-across 5s steps(20, end) infinite;
+}
+
+/* A ball held on the dribble while something loads. */
+@keyframes dribble {
+  0%,
+  100% {
+    transform: translateY(0) scaleY(1);
+  }
+  40% {
+    transform: translateY(9px) scaleY(0.86);
+  }
+  50% {
+    transform: translateY(10px) scaleY(0.8);
+  }
+  60% {
+    transform: translateY(9px) scaleY(0.86);
+  }
+}
+
+.ball-dribble {
+  transform-origin: bottom center;
+  animation: dribble 620ms steps(5, end) infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {

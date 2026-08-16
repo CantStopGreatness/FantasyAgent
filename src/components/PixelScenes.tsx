@@ -1,7 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { BALL, FOOTBALL, HOOP, PixelSprite } from "./PixelSprite";
+import {
+  BALL,
+  FOOTBALL_SPIN,
+  GOAL_FRAME,
+  HOOP,
+  MESH_FRAMES,
+  NET_FRAMES,
+  PixelAnim,
+  PixelSprite,
+  SOCCER_BALL,
+} from "./PixelSprite";
 
 /**
  * Looping sprite scenes.
@@ -34,44 +44,100 @@ function useOnScreen<T extends HTMLElement>() {
 }
 
 /**
- * The focal moment: a shot arcing up and dropping through the net, on a loop.
+ * A travelling sprite rides a wrapper that fills the whole lane.
  *
- * Sits where the landing's right column would otherwise run out of content,
- * so it fills real estate with the product's own subject rather than padding.
+ * This exists because CSS transform percentages resolve against the element's
+ * own box: `translateX(50%)` on a 44px ball moves it 22px, not half the lane.
+ * Sizing the mover to the lane makes the percentages mean what the keyframes
+ * intend, so a shot can be aimed at the rim in lane-relative terms and stay
+ * aimed when the column resizes.
  */
-export function HoopShot({ className = "" }: { className?: string }) {
+function Mover({ className, children }: { className: string; children: React.ReactNode }) {
+  return <div className={`pointer-events-none absolute inset-0 ${className}`}>{children}</div>;
+}
+
+/**
+ * Three sports, one panel.
+ *
+ * Kept as a single card with shared ground, one sprite scale and hard ink
+ * rules between lanes, so it reads as one attract-mode screen rather than
+ * three unrelated toys scattered down the page. It also carries the
+ * sport-agnostic claim visually: the engine is not a basketball tool.
+ */
+export function SportsReel({ className = "" }: { className?: string }) {
   const { ref, onScreen } = useOnScreen<HTMLDivElement>();
 
-  // Fixed scene box: the arc keyframes are authored in pixels against these
-  // dimensions, so a fluid width would throw the ball off the rim.
   return (
-    <div
-      ref={ref}
-      className={`pixel-scene relative h-[168px] w-[248px] ${className}`}
-      data-running={onScreen}
-      aria-hidden
-    >
-      <PixelSprite bitmap={HOOP} className="absolute right-0 top-2 h-[96px] w-[104px]" />
-      <PixelSprite bitmap={BALL} className="ball-shot absolute left-0 top-0 h-[52px] w-[52px]" />
+    <div ref={ref} className={`card pixel-scene ${className}`} data-running={onScreen}>
+      <div className="strip flex items-baseline justify-between px-4 py-2">
+        <span className="font-display text-sm">BUILT FOR EVERY LEAGUE</span>
+        <span className="text-[0.65rem] text-bone-3">NBA today · more next</span>
+      </div>
+
+      <div className="divide-y-[3px] divide-ink border-t-[3px] border-ink" aria-hidden>
+        <HoopLane />
+        <FootballLane />
+        <GoalLane />
+      </div>
+    </div>
+  );
+}
+
+/** Lanes are dark so bone nets, a white goal and an orange ball all read. */
+const LANE = "lane relative h-[120px] overflow-hidden";
+
+/** The ball arcs up and drops through the rim; the net snaps as it passes. */
+function HoopLane() {
+  return (
+    <div className={LANE}>
+      <PixelSprite bitmap={HOOP} className="absolute right-6 top-4 h-[68px] w-[110px]" />
+      {/* Net hangs from the rim and goes taut on the pass-through frame. */}
+      <PixelAnim
+        frames={NET_FRAMES}
+        duration="3.6s"
+        className="absolute right-[26px] top-[66px] w-[70px]"
+      />
+      <Mover className="ball-shot">
+        <PixelSprite bitmap={BALL} className="absolute left-0 top-0 h-[44px] w-[44px]" />
+      </Mover>
     </div>
   );
 }
 
 /**
- * A football spiralling across the width — the multi-sport promise, stated
- * visually rather than in a roadmap sentence.
+ * A spiral along an arc.
+ *
+ * The spin is frames, not a transform: the laces travel across the face and
+ * wrap out of sight, which is what a spiral looks like. An end-over-end
+ * `rotate()` is a wobbling duck.
  */
-export function FootballThrow({ className = "" }: { className?: string }) {
-  const { ref, onScreen } = useOnScreen<HTMLDivElement>();
-
+function FootballLane() {
   return (
-    <div
-      ref={ref}
-      className={`pixel-scene relative overflow-hidden ${className}`}
-      data-running={onScreen}
-      aria-hidden
-    >
-      <PixelSprite bitmap={FOOTBALL} className="ball-throw absolute top-0 h-[44px] w-[82px]" />
+    <div className={LANE}>
+      <Mover className="ball-throw">
+        <PixelAnim
+          frames={FOOTBALL_SPIN}
+          duration="0.44s"
+          className="absolute left-0 top-0 w-[92px]"
+        />
+      </Mover>
+    </div>
+  );
+}
+
+/** Struck low and hard; the mesh snaps taut where it lands. */
+function GoalLane() {
+  return (
+    <div className={LANE}>
+      <PixelSprite bitmap={GOAL_FRAME} className="absolute right-4 top-6 h-[76px] w-[130px]" />
+      <PixelAnim
+        frames={MESH_FRAMES}
+        duration="3.6s"
+        className="absolute right-[31px] top-[39px] w-[92px]"
+      />
+      <Mover className="ball-strike">
+        <PixelSprite bitmap={SOCCER_BALL} className="absolute left-0 top-[72px] h-[34px] w-[34px]" />
+      </Mover>
     </div>
   );
 }
@@ -86,7 +152,10 @@ export function DribbleLoader({ label }: { label: string }) {
   return (
     <div className="pixel-scene flex items-center gap-3" data-running="true">
       <span className="relative block h-[40px] w-[30px]">
-        <PixelSprite bitmap={BALL} className="ball-dribble absolute inset-x-0 top-0 h-[30px] w-[30px]" />
+        <PixelSprite
+          bitmap={BALL}
+          className="ball-dribble absolute inset-x-0 top-0 h-[30px] w-[30px]"
+        />
       </span>
       <span className="font-display text-sm text-ink-2">{label}</span>
     </div>

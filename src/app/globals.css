@@ -190,59 +190,131 @@ body {
   animation-play-state: paused;
 }
 
-/* A shot: up off the hand, over the top, down through the net, gone. */
+/* Reel lanes: a dark screen set into the bone card, so bone nets, a white
+   goal and an orange ball all read against the ground. */
+.lane {
+  background-color: var(--field-deep);
+  background-image: repeating-conic-gradient(
+    rgba(255, 255, 255, 0.045) 0% 25%,
+    transparent 0% 50%
+  );
+  background-size: calc(var(--px) * 2) calc(var(--px) * 2);
+}
+
+/* Sprite-sheet playback: scrub a horizontal strip of frames. */
+@keyframes play-frames {
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+.pixel-anim {
+  display: block;
+  overflow: hidden;
+}
+
+.pixel-anim > svg {
+  animation-name: play-frames;
+  animation-iteration-count: infinite;
+  will-change: transform;
+}
+
+/* A shot: up off the hand, over the top, and down THROUGH the rim.
+   The rim sits at right-4 (16px) and is 78px wide, so its centre is about
+   55px from the right edge of a 104px-tall lane; the ball is 34px, and these
+   values put its centre on that point at 58%, which is the frame the net
+   strip snaps taut on. */
 @keyframes shot-arc {
   0% {
-    transform: translate(0, 116px);
+    transform: translate(6px, 64px);
     opacity: 0;
   }
-  6%,
-  76% {
+  8%,
+  72% {
     opacity: 1;
   }
-  42% {
-    transform: translate(108px, -8px);
+  32% {
+    transform: translate(calc(45% - 22px), 2px);
   }
-  60% {
-    transform: translate(172px, 40px);
+  56% {
+    transform: translate(calc(100% - 96px), 52px);
   }
-  72% {
-    transform: translate(180px, 86px);
+  68% {
+    transform: translate(calc(100% - 94px), 84px);
   }
-  84% {
-    transform: translate(182px, 146px);
+  78% {
+    transform: translate(calc(100% - 94px), 120px);
     opacity: 0;
   }
   100% {
-    transform: translate(0, 116px);
+    transform: translate(6px, 64px);
     opacity: 0;
   }
 }
 
 .ball-shot {
-  animation: shot-arc 3.2s steps(11, end) infinite;
+  animation: shot-arc 3.6s steps(12, end) infinite;
 }
 
-/* A thrown ball spirals across and off the far side. */
-@keyframes throw-across {
+/* The throw: a parabola across the lane, fading in and out at the edges so it
+   is never hard-clipped by the lane boundary. No rotation here — the spin is
+   frames, handled by the sprite strip itself. */
+@keyframes throw-arc {
   0% {
-    transform: translateX(-14%) rotate(0deg);
+    transform: translate(-100px, 74px);
     opacity: 0;
   }
-  8% {
+  12%,
+  86% {
     opacity: 1;
   }
-  90% {
-    opacity: 1;
+  32% {
+    transform: translate(28%, 22px);
+  }
+  50% {
+    transform: translate(calc(50% - 46px), 8px);
+  }
+  68% {
+    transform: translate(72%, 22px);
   }
   100% {
-    transform: translateX(1200%) rotate(1080deg);
+    transform: translate(calc(100% + 20px), 74px);
     opacity: 0;
   }
 }
 
 .ball-throw {
-  animation: throw-across 5s steps(20, end) infinite;
+  animation: throw-arc 4.4s steps(22, end) infinite;
+}
+
+/* Struck low into the goal, then gone into the mesh. */
+@keyframes strike-goal {
+  0% {
+    transform: translate(4px, 0px);
+    opacity: 0;
+  }
+  10%,
+  54% {
+    opacity: 1;
+  }
+  36% {
+    transform: translate(calc(45% - 17px), -14px);
+  }
+  56% {
+    transform: translate(calc(100% - 105px), -22px);
+  }
+  64% {
+    transform: translate(calc(100% - 92px), -20px);
+    opacity: 0;
+  }
+  100% {
+    transform: translate(4px, 0px);
+    opacity: 0;
+  }
+}
+
+.ball-strike {
+  animation: strike-goal 3.6s steps(12, end) infinite;
 }
 
 /* A ball held on the dribble while something loads. */
@@ -275,3 +347,4 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+

@@ -368,6 +368,8 @@ body {
 .type-line {
   display: block;
   width: fit-content;
+  overflow: visible;      /* new — belt-and-suspenders against ancestor clipping */
+  white-space: nowrap;    /* new — stops multi-word lines like "PLAY BY" from wrapping at narrow widths */
   clip-path: inset(0 100% 0 0);
   animation-name: type-in;
   animation-fill-mode: both;

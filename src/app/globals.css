@@ -354,9 +354,11 @@ body {
  * needs no measurement. steps() is what makes it read as typing rather than
  * as a wipe. Duration and step count are set per line from its length.
  */
+/* Vertical bleed: the display leading (0.88) is shorter than the glyphs, so
+   an inset of 0 top and bottom shaves caps and descenders off every line. */
 @keyframes type-in {
   to {
-    clip-path: inset(0 -0.12em 0 0);
+    clip-path: inset(-0.25em -0.12em -0.25em 0);
   }
 }
 
@@ -368,9 +370,8 @@ body {
 .type-line {
   display: block;
   width: fit-content;
-  overflow: visible;      /* new — belt-and-suspenders against ancestor clipping */
-  white-space: nowrap;    /* new — stops multi-word lines like "PLAY BY" from wrapping at narrow widths */
-  clip-path: inset(0 100% 0 0);
+  white-space: nowrap; /* "PLAY BY" stays one typed line at narrow widths */
+  clip-path: inset(-0.25em 100% -0.25em 0);
   animation-name: type-in;
   animation-fill-mode: both;
 }

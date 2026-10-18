@@ -55,7 +55,7 @@ export default function Landing() {
             <h1 className="font-display text-[clamp(2.8rem,8vw,5.5rem)] leading-[0.88] text-chalk">
               <TypeLine text="YOUR" start={0.1} />
               <TypeLine text="LEAGUE" start={0.32} />
-              <TypeLine text="DOESN'T" start={0.63} />
+              <TypeLine text="DOESN’T" start={0.63} />
               <TypeLine text="PLAY BY" start={0.98} />
               <TypeLine text="GENERIC" start={1.33} className="text-gold" />
               <TypeLine text="RULES." start={1.68} className="text-gold" caret />
